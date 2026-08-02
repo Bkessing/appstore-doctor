@@ -1,0 +1,154 @@
+# appstore-doctor
+
+Diagnose why your iOS app won't ship.
+
+App Store errors name a symptom, not a cause. A missing distribution certificate
+reports as `No Accounts`. A locked keychain reports as `errSecInternalComponent`
+on whatever framework happened to be signed first. An app can be `READY_FOR_SALE`
+and invisible in every storefront on Earth.
+
+This reads the actual state of your machine and your App Store Connect account
+and tells you what's wrong in plain language, with the fix.
+
+**Read-only.** It never writes to your App Store Connect account. Your API key
+never leaves your machine.
+
+```
+$ appstore-doctor --bundle com.acme.app
+
+  FAIL  signing.identities: no Apple Distribution identity (release export will fail)
+          - Apple Development: you@example.com (ABCDE12345)
+     fix:  This is what 'exportArchive No Accounts' actually means.
+           Create one: fastlane cert  — or check whether it was revoked in the
+           developer portal (Certificates, Identifiers & Profiles).
+
+  FAIL  listing.availability: no app-level availability resource exists (404)
+          This 404 is the actual signal, not API noise.
+     fix:  The app can be READY_FOR_SALE and still be invisible in every
+           storefront. Create availability in App Store Connect > Pricing and
+           Availability and confirm you can read it back.
+
+  2 blocking issues
+```
+
+## Install
+
+No install required. Clone it and run it:
+
+```bash
+git clone https://github.com/Bkessing/appstore-doctor
+cd appstore-doctor
+python3 -m appstore_doctor --local-only
+```
+
+That works on a stock Mac. Everything is standard library except `cryptography`,
+which macOS usually already has — if not, `python3 -m pip install cryptography`.
+
+If you'd rather have it on your `PATH` as a command:
+
+```bash
+python3 -m pip install .
+appstore-doctor --local-only
+```
+
+Note that the `pip` bundled with Xcode's Python (3.9, pip 21.x) is too old to
+install this and will fail. Use the clone-and-run form above, or a Python from
+Homebrew or python.org.
+
+Requires Python 3.9+. The signing checks are macOS-only; the App Store Connect
+checks run anywhere.
+
+## Use
+
+Local signing checks need no credentials at all:
+
+```bash
+appstore-doctor --local-only
+```
+
+Add App Store Connect checks by naming your app:
+
+```bash
+appstore-doctor --bundle com.acme.app
+appstore-doctor --app-id 1234567890 --json
+```
+
+### Credentials
+
+Only needed for the App Store Connect checks. From App Store Connect →
+Users and Access → Integrations → App Store Connect API:
+
+```bash
+export ASC_KEY_ID=XXXXXXXXXX          # not a secret, just an identifier
+export ASC_ISSUER_ID=xxxxxxxx-xxxx-…  # same
+# and put AuthKey_<KEY_ID>.p8 here:
+#   ~/.appstoreconnect/private_keys/
+```
+
+A **Developer** role key is enough. The key signs a request locally and talks
+straight to Apple — there is no server in the middle, nothing is uploaded, and
+every request this tool makes is a `GET`.
+
+## What it checks
+
+**Locally, no credentials:**
+
+| Check | The failure it catches |
+|---|---|
+| Signing identities | Missing Distribution cert → `exportArchive No Accounts` |
+| Keychain lock state | Locked keychain → `CodeSign … errSecInternalComponent` |
+| Provisioning profiles | Expired, or bound to a certificate you no longer hold |
+
+**Against App Store Connect:**
+
+| Check | The failure it catches |
+|---|---|
+| App availability | Approved, live, and invisible in every territory |
+| Version state | Rejected or unsubmitted when you thought otherwise |
+| Attached build | Submitting a version with no build attached |
+| Screenshot sets | Updating 6.5" while 6.9" quietly serves stale artwork |
+| Subscription metadata | Guideline 3.1.2 rejections on auto-renewing subs |
+| Release type | `MANUAL` when you expected it to ship on approval |
+
+## Why these checks
+
+Every one of them is a specific day someone lost.
+
+**The certificate that vanished.** A distribution certificate and every
+provisioning profile disappeared from a developer account between two builds.
+The build failed with `exportArchive No Accounts`, which reads like Xcode is
+signed out. It wasn't. Recreating the certificate then produced
+`CodeSign … errSecInternalComponent` on `Sentry.framework` — which reads like a
+dependency problem. It was a locked keychain.
+
+**The profile that looked fine.** After replacing the certificate, export failed
+with *"doesn't include signing certificate"* — a cached profile still bound to the
+revoked cert. Deleting it produced *"No profiles for 'com.example.app' were
+found"*, even with a valid profile installed in both provisioning directories.
+That message is misleading: the profile isn't missing. Automatic signing at the
+export step needs an Apple ID signed into Xcode, and a headless run doesn't have
+one. The fix is manual signing with the profile named explicitly.
+
+**The app nobody could find.** An app sat at `READY_FOR_SALE` for days, fully
+approved, and appeared in no storefront. The app-level availability resource
+had never been created. The API returned 404 for it the whole time, and that
+404 was the only signal.
+
+**The screenshots that didn't change.** A release pipeline updated
+`APP_IPHONE_65` and left `APP_IPHONE_67` untouched. The 6.9" set is what modern
+iPhones render in search results. Every screenshot refresh for months changed
+nothing most people ever saw.
+
+## Exit codes
+
+`0` — no blocking issues. `1` — at least one `FAIL`. Warnings do not fail the
+run, so this is safe in CI.
+
+## Scope
+
+This diagnoses. It does not fix, and it does not write. A tool that mutates a
+live App Store listing on a bug is not one you should hand an API key to.
+
+## License
+
+MIT.
