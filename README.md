@@ -99,6 +99,13 @@ every request this tool makes is a `GET`.
 | Keychain lock state | Locked keychain → `CodeSign … errSecInternalComponent` |
 | Provisioning profiles | Expired, or bound to a certificate you no longer hold |
 
+**Account vs. this Mac:**
+
+| Check | The failure it catches |
+|---|---|
+| Certificate sync | A certificate your account has but this Mac can't sign with — `No codesigning identities … were found` while the portal looks perfect |
+| Certificate expiry | `CSSMERR_TP_CERT_EXPIRED`, and the profiles it silently invalidates |
+
 **Against App Store Connect:**
 
 | Check | The failure it catches |
@@ -109,6 +116,22 @@ every request this tool makes is a `GET`.
 | Screenshot sets | Updating 6.5" while 6.9" quietly serves stale artwork |
 | Subscription metadata | Guideline 3.1.2 rejections on auto-renewing subs |
 | Release type | `MANUAL` when you expected it to ship on approval |
+| Privacy policy URL | Guideline 5.1.1 metadata rejection |
+| Age rating | Missing declaration blocks submission |
+| Review demo account | Guideline 2.1 — a reviewer who can't get past your login |
+| In-app purchases | Products stuck in `MISSING_METADATA` that can never sell |
+| Export compliance | Missing `ITSAppUsesNonExemptEncryption` blocks submission |
+
+### What it deliberately does not claim
+
+Some things aren't detectable and the tool says so rather than guessing:
+
+- **Whether a reviewer can actually reach your in-app purchases.** IAPs gated
+  behind progression cause Guideline 2.1(b) rejections and no API can see it.
+  The tool raises it as something to check by hand.
+- **Whether your demo credentials actually work.** It can only see that they're set.
+- **Agreement status and the App Privacy questionnaire.** Both return 404 on the
+  App Store Connect API, so they're out of reach.
 
 ## Why these checks
 

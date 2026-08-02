@@ -258,3 +258,4 @@ def run(report, client, app):
     if version:
         check_screenshots(report, client, version)
         check_subscription_metadata(report, client, app, version)
+    return version

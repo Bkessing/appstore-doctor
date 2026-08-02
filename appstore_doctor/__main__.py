@@ -8,7 +8,7 @@ import argparse
 import sys
 
 from .report import Report
-from .checks import signing, listing
+from .checks import signing, listing, readiness, certificates
 from .asc import Client, MissingCredentials, ASCError
 
 VERSION = "0.1.0"
@@ -61,6 +61,7 @@ def main(argv=None):
         else:
             try:
                 client = Client()
+                certificates.run(report, client)
                 app = client.find_app(bundle_id=args.bundle, app_id=args.app_id)
                 if not app:
                     report.fail(
@@ -69,7 +70,8 @@ def main(argv=None):
                         fix="Check the bundle id, and that the API key belongs to the right team.",
                     )
                 else:
-                    listing.run(report, client, app)
+                    version = listing.run(report, client, app)
+                    readiness.run(report, client, app, version)
             except MissingCredentials as err:
                 report.skip("listing", "App Store Connect credentials not configured",
                             detail=str(err))
