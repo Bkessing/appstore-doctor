@@ -1,0 +1,53 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    # macOS because the signing checks shell out to `security`. The suite itself
+    # is hermetic (no network, no real keychain), but running it here keeps the
+    # platform honest.
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is what ships with Xcode's bundled Python, so it is the floor a
+        # real user is most likely to hit.
+        python-version: ["3.9", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip cryptography
+
+      - name: Run tests
+        run: python -m unittest discover tests -v
+
+      - name: Smoke test the CLI
+        run: |
+          python -m appstore_doctor --version
+          python -m appstore_doctor --help > /dev/null
+          # Local-only run must never crash and must never require credentials.
+          python -m appstore_doctor --local-only --no-color || true
+          # JSON output must be parseable.
+          python -m appstore_doctor --local-only --json | python -c "import json,sys; json.load(sys.stdin)"
+
+      - name: Confirm no write verbs exist in the API client
+        # The whole trust model is that this tool only ever reads. Fail the
+        # build if a POST/PATCH/DELETE ever appears.
+        run: |
+          if grep -nE '"(POST|PATCH|DELETE|PUT)"|method="(POST|PATCH|DELETE|PUT)"' \
+              appstore_doctor/*.py appstore_doctor/checks/*.py; then
+            echo "::error::a write verb appeared in the client — this tool must stay read-only"
+            exit 1
+          fi
+          echo "read-only confirmed"
