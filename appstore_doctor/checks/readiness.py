@@ -43,7 +43,8 @@ def check_privacy_policy(report, client, app):
             "readiness.privacy_policy",
             f"no privacy policy URL set for: {', '.join(missing)}",
             fix="Every app needs a privacy policy URL, and it must resolve. Set it in\n"
-                "App Store Connect > App Information > Privacy Policy URL.",
+                "App Store Connect > App Information > Privacy Policy URL.\n"
+                "Or, with ios-release-kit:  URL=<your-url> fastlane set_privacy_policy",
         )
     else:
         report.ok("readiness.privacy_policy",

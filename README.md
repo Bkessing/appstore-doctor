@@ -123,6 +123,26 @@ A **Developer** role key is enough. The key signs a request locally and talks
 straight to Apple — there is no server in the middle, nothing is uploaded, and
 every request this tool makes is a `GET`.
 
+## Install both
+
+These are two halves of one job: this one reads, the other writes. Install the
+pair and Claude picks whichever the moment calls for.
+
+```bash
+git clone https://github.com/Bkessing/appstore-doctor
+git clone https://github.com/Bkessing/ios-release-kit
+
+mkdir -p ~/.claude/skills
+cp -R appstore-doctor/skills/appstore-doctor  ~/.claude/skills/
+cp -R ios-release-kit/skills/ios-release-kit  ~/.claude/skills/
+```
+
+They are deliberately separate packages. appstore-doctor issues **GET requests
+only** — that is why handing it an API key is reasonable, and it would not
+survive being merged into something that can submit an app for review. It also
+runs on a stock Mac with no Apple membership and no fastlane, which matters when
+the broken thing *is* your fastlane setup.
+
 ## What it checks
 
 **Locally, no credentials:**

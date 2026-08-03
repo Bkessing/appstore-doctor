@@ -45,7 +45,8 @@ def check_availability(report, client, app):
                 detail="This 404 is the actual signal, not API noise.",
                 fix="The app can be READY_FOR_SALE and still be invisible in every\n"
                     "storefront. Create availability in App Store Connect > Pricing and\n"
-                    "Availability and confirm you can read it back.",
+                    "Availability and confirm you can read it back.\n"
+                    "Or, with ios-release-kit:  fastlane open_territories",
             )
         else:
             report.skip("listing.availability", f"could not read availability ({err})")

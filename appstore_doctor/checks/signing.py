@@ -77,8 +77,9 @@ def check_identities(report):
             "signing.identities", "no Apple Distribution identity (release export will fail)",
             detail=names,
             fix="This is what 'exportArchive No Accounts' actually means.\n"
-                "Create one: fastlane cert  — or check whether it was revoked in the\n"
-                "developer portal (Certificates, Identifiers & Profiles).",
+                "Create one: fastlane signing_cert (ios-release-kit), or fastlane cert,\n"
+                "or check whether it was revoked in the developer portal\n"
+                "(Certificates, Identifiers & Profiles).",
         )
     elif not has_dev:
         report.warn("signing.identities", "Distribution present, no Development identity",
