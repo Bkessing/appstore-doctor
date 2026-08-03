@@ -467,6 +467,41 @@ class TestProjectChecks(unittest.TestCase):
         project.check_build_number(r, self.tmp, client=client, app=APP)
         self.assertEqual(status_of(r, "project.build_number"), FAIL)
 
+    def _collide(self, fastfile=None):
+        """A project whose committed build number is already uploaded, optionally
+        alongside a Fastfile."""
+        os.makedirs(os.path.join(self.tmp, "App.xcodeproj"), exist_ok=True)
+        with open(os.path.join(self.tmp, "App.xcodeproj", "project.pbxproj"), "w") as f:
+            f.write("CURRENT_PROJECT_VERSION = 17;\n")
+        if fastfile is not None:
+            os.makedirs(os.path.join(self.tmp, "fastlane"), exist_ok=True)
+            with open(os.path.join(self.tmp, "fastlane", "Fastfile"), "w") as f:
+                f.write(fastfile)
+        return FakeClient({"/builds": {"data": [{"attributes": {"version": "17"}}]}})
+
+    def test_collision_only_warns_when_a_lane_stamps_the_build_number(self):
+        # The committed number is decoration on these projects, so a hard
+        # failure here is a false alarm and trains people to ignore the tool.
+        client = self._collide("lane :beta do\n  increment_build_number(build_number: 42)\nend\n")
+        r = Report()
+        project.check_build_number(r, self.tmp, client=client, app=APP)
+        self.assertEqual(status_of(r, "project.build_number"), WARN)
+
+    def test_xcargs_style_stamping_is_recognised(self):
+        # The kit's own lanes stamp via xcargs, not the fastlane action.
+        client = self._collide('gym(xcargs: "CURRENT_PROJECT_VERSION=#{timestamp_build}")\n')
+        r = Report()
+        project.check_build_number(r, self.tmp, client=client, app=APP)
+        self.assertEqual(status_of(r, "project.build_number"), WARN)
+
+    def test_collision_still_fails_when_the_lane_does_not_stamp(self):
+        # A Fastfile existing is not itself an excuse -- only one that rewrites
+        # the number is.
+        client = self._collide("lane :beta do\n  gym(scheme: \"App\")\n  pilot\nend\n")
+        r = Report()
+        project.check_build_number(r, self.tmp, client=client, app=APP)
+        self.assertEqual(status_of(r, "project.build_number"), FAIL)
+
     def test_unused_build_number_passes(self):
         os.makedirs(os.path.join(self.tmp, "App.xcodeproj"))
         with open(os.path.join(self.tmp, "App.xcodeproj", "project.pbxproj"), "w") as f:

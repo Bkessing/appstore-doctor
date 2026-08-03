@@ -181,6 +181,35 @@ def check_privacy_manifest(report, root):
         )
 
 
+# Ways a release lane commonly overwrites the build number at build time. Any of
+# these means the checked-in CURRENT_PROJECT_VERSION is not what gets uploaded.
+STAMP_MARKERS = (
+    "increment_build_number",
+    "CURRENT_PROJECT_VERSION=",
+    "build_number:",
+    "latest_testflight_build_number",
+)
+
+
+def build_number_is_stamped(root):
+    """Whether a Fastfile in this project rewrites the build number at build time.
+
+    Deliberately a text scan and deliberately not clever. It decides between a
+    hard failure and a warning, so a false positive costs a softened message and
+    a false negative costs nothing that was not already the old behaviour.
+    """
+    for name in ("fastlane/Fastfile", "Fastfile"):
+        path = os.path.join(root, name)
+        try:
+            with open(path) as handle:
+                body = handle.read()
+        except OSError:
+            continue
+        if any(marker in body for marker in STAMP_MARKERS):
+            return True
+    return False
+
+
 def check_build_number(report, root, client=None, app=None):
     """Compare the local build number against what has already been uploaded.
 
@@ -188,7 +217,14 @@ def check_build_number(report, root, client=None, app=None):
     uploaded. Whether a bump to the marketing version lets you reset it has been
     reported inconsistently across Xcode versions, so do not infer a local rule.
     Ask App Store Connect what actually exists.
+
+    The committed CURRENT_PROJECT_VERSION is only what ships if nothing rewrites
+    it at build time. Plenty of release lanes stamp a timestamp instead, and on
+    those projects the checked-in value is decoration -- reporting a hard failure
+    against it is a false alarm, and a checker that cries wolf gets ignored. When
+    a lane looks like it stamps the number, this warns and says why instead.
     """
+    stamped = build_number_is_stamped(root)
     local = None
     for pbx in glob.glob(os.path.join(root, "**", "project.pbxproj"), recursive=True):
         try:
@@ -224,18 +260,30 @@ def check_build_number(report, root, client=None, app=None):
 
     detail = "recently uploaded: " + ", ".join(uploaded[:5])
 
-    if local in uploaded:
-        report.fail(
-            "project.build_number",
-            f"build number {local} has already been uploaded",
-            detail=detail,
-            fix="Upload is rejected with \"The bundle version must be higher than the\n"
-                "previously uploaded version\". Bump CURRENT_PROJECT_VERSION.\n"
-                "Note: fastlane lanes that stamp a timestamp build number sidestep this\n"
-                "entirely, which is why it may not match what actually ships.",
-        )
-    else:
+    if local not in uploaded:
         report.ok("project.build_number", f"local build {local} is unused", detail=detail)
+        return
+
+    if stamped:
+        # The number in the project is not the number that will be uploaded, so
+        # a collision here predicts nothing.
+        report.warn(
+            "project.build_number",
+            f"build number {local} is already uploaded, but a release lane stamps its own",
+            detail=detail,
+            fix="Your Fastfile sets the build number at build time, so the value in\n"
+                "the project file is not what ships and this collision is probably\n"
+                "harmless. Worth a look only if you also build outside that lane.",
+        )
+        return
+
+    report.fail(
+        "project.build_number",
+        f"build number {local} has already been uploaded",
+        detail=detail,
+        fix="Upload is rejected with \"The bundle version must be higher than the\n"
+            "previously uploaded version\". Bump CURRENT_PROJECT_VERSION.",
+    )
 
 
 def run(report, root, client=None, app=None):
