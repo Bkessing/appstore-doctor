@@ -70,6 +70,7 @@ Add App Store Connect checks by naming your app:
 
 ```bash
 appstore-doctor --bundle com.acme.app
+appstore-doctor --bundle com.acme.app --project ~/code/MyApp
 appstore-doctor --app-id 1234567890 --json
 ```
 
@@ -106,6 +107,14 @@ every request this tool makes is a `GET`.
 | Certificate sync | A certificate your account has but this Mac can't sign with — `No codesigning identities … were found` while the portal looks perfect |
 | Certificate expiry | `CSSMERR_TP_CERT_EXPIRED`, and the profiles it silently invalidates |
 
+**Against your project directory** (`--project`, no credentials):
+
+| Check | The failure it catches |
+|---|---|
+| App icon alpha channel | ITMS-90717 — and note Apple rejects an icon that *has* an alpha channel, so a fully opaque RGBA export still fails |
+| Privacy manifest | A linked SDK on Apple's required list with no `PrivacyInfo.xcprivacy` |
+| Build number | Uploading a `CURRENT_PROJECT_VERSION` that already exists |
+
 **Against App Store Connect:**
 
 | Check | The failure it catches |
@@ -132,6 +141,12 @@ Some things aren't detectable and the tool says so rather than guessing:
 - **Whether your demo credentials actually work.** It can only see that they're set.
 - **Agreement status and the App Privacy questionnaire.** Both return 404 on the
   App Store Connect API, so they're out of reach.
+- **Whether you've declared every required-reason API.** Apple detects this from
+  compiled binaries, including closed-source SDKs. This tool only matches linked
+  package *names* against Apple's published list, so it can tell you that you
+  probably need a manifest — it cannot tell you that you're clear.
+- **Icon Composer `.icon` bundles.** The compiled output can differ from the
+  source layers, so the tool says it can't check rather than pretending.
 
 ## Why these checks
 

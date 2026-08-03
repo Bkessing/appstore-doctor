@@ -26,7 +26,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from appstore_doctor.report import Report, OK, WARN, FAIL, SKIP
-from appstore_doctor.checks import listing, readiness, certificates
+from appstore_doctor.checks import listing, readiness, certificates, project
 from appstore_doctor.asc import ASCError
 
 
@@ -378,3 +378,100 @@ class TestReportContract(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestProjectChecks(unittest.TestCase):
+    """Local project checks. The icon case matters most: Apple rejects an icon
+    that CARRIES an alpha channel, not one that merely looks transparent, so a
+    fully opaque RGBA export must still fail."""
+
+    @staticmethod
+    def _png(path, w, h, colour_type):
+        import struct, zlib
+        def chunk(tag, data):
+            c = tag + data
+            return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xffffffff)
+        ihdr = struct.pack(">IIBBBBB", w, h, 8, colour_type, 0, 0, 0)
+        px = 4 if colour_type == 6 else 3
+        raw = b"".join(b"\x00" + bytes([0, 0, 0] + ([255] if px == 4 else [])) * w for _ in range(h))
+        with open(path, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+                    + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        self.iconset = os.path.join(self.tmp, "Assets.xcassets", "AppIcon.appiconset")
+        os.makedirs(self.iconset)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_opaque_rgb_icon_passes(self):
+        self._png(os.path.join(self.iconset, "icon_1024.png"), 1024, 1024, 2)
+        r = Report()
+        project.check_app_icon(r, self.tmp)
+        self.assertEqual(status_of(r, "project.icon"), OK)
+
+    def test_fully_opaque_rgba_icon_still_fails(self):
+        # Every pixel is opaque; the file still has an alpha channel. Apple
+        # rejects on the channel, not the pixels.
+        self._png(os.path.join(self.iconset, "icon_1024.png"), 1024, 1024, 6)
+        r = Report()
+        project.check_app_icon(r, self.tmp)
+        self.assertEqual(status_of(r, "project.icon"), FAIL)
+
+    def test_missing_1024_icon_warns(self):
+        self._png(os.path.join(self.iconset, "icon_60.png"), 60, 60, 2)
+        r = Report()
+        project.check_app_icon(r, self.tmp)
+        self.assertEqual(status_of(r, "project.icon"), WARN)
+
+    def test_sdk_requiring_manifest_without_one_fails(self):
+        with open(os.path.join(self.tmp, "Podfile.lock"), "w") as f:
+            f.write("PODS:\n  - Alamofire (5.8)\n")
+        r = Report()
+        project.check_privacy_manifest(r, self.tmp)
+        self.assertEqual(status_of(r, "project.privacy_manifest"), FAIL)
+
+    def test_cocoapods_subspec_umbrella_is_matched(self):
+        # "Firebase/Core" collapses to "Firebase", which is not itself a literal
+        # entry on Apple's list even though everything under it is.
+        with open(os.path.join(self.tmp, "Podfile.lock"), "w") as f:
+            f.write("PODS:\n  - Firebase/Core (10.0)\n")
+        r = Report()
+        project.check_privacy_manifest(r, self.tmp)
+        self.assertEqual(status_of(r, "project.privacy_manifest"), FAIL)
+
+    def test_unknown_short_pod_does_not_oversweep_the_list(self):
+        with open(os.path.join(self.tmp, "Podfile.lock"), "w") as f:
+            f.write("PODS:\n  - Abc (1.0)\n")
+        r = Report()
+        project.check_privacy_manifest(r, self.tmp)
+        self.assertEqual(status_of(r, "project.privacy_manifest"), WARN)
+
+    def test_manifest_present_passes(self):
+        open(os.path.join(self.tmp, "PrivacyInfo.xcprivacy"), "w").close()
+        r = Report()
+        project.check_privacy_manifest(r, self.tmp)
+        self.assertEqual(status_of(r, "project.privacy_manifest"), OK)
+
+    def test_already_uploaded_build_number_fails(self):
+        os.makedirs(os.path.join(self.tmp, "App.xcodeproj"))
+        with open(os.path.join(self.tmp, "App.xcodeproj", "project.pbxproj"), "w") as f:
+            f.write("CURRENT_PROJECT_VERSION = 17;\n")
+        client = FakeClient({"/builds": {"data": [
+            {"attributes": {"version": "17"}}, {"attributes": {"version": "16"}}]}})
+        r = Report()
+        project.check_build_number(r, self.tmp, client=client, app=APP)
+        self.assertEqual(status_of(r, "project.build_number"), FAIL)
+
+    def test_unused_build_number_passes(self):
+        os.makedirs(os.path.join(self.tmp, "App.xcodeproj"))
+        with open(os.path.join(self.tmp, "App.xcodeproj", "project.pbxproj"), "w") as f:
+            f.write("CURRENT_PROJECT_VERSION = 18;\n")
+        client = FakeClient({"/builds": {"data": [{"attributes": {"version": "17"}}]}})
+        r = Report()
+        project.check_build_number(r, self.tmp, client=client, app=APP)
+        self.assertEqual(status_of(r, "project.build_number"), OK)

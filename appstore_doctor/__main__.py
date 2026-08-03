@@ -8,7 +8,7 @@ import argparse
 import sys
 
 from .report import Report
-from .checks import signing, listing, readiness, certificates
+from .checks import signing, listing, readiness, certificates, project
 from .asc import Client, MissingCredentials, ASCError
 
 VERSION = "0.1.0"
@@ -39,6 +39,8 @@ def main(argv=None):
     )
     parser.add_argument("--bundle", help="bundle identifier, e.g. com.acme.app")
     parser.add_argument("--app-id", help="numeric App Store id, if you know it")
+    parser.add_argument("--project", metavar="DIR",
+                        help="path to your Xcode project directory for local checks")
     parser.add_argument("--json", action="store_true", help="emit JSON instead of text")
     parser.add_argument("--local-only", action="store_true",
                         help="skip App Store Connect checks entirely")
@@ -50,6 +52,8 @@ def main(argv=None):
 
     # Local signing checks always run and never need credentials.
     signing.run(report, bundle_id=args.bundle)
+
+    _asc = {"client": None, "app": None}
 
     if not args.local_only:
         if not (args.bundle or args.app_id):
@@ -70,6 +74,7 @@ def main(argv=None):
                         fix="Check the bundle id, and that the API key belongs to the right team.",
                     )
                 else:
+                    _asc["client"], _asc["app"] = client, app
                     version = listing.run(report, client, app)
                     readiness.run(report, client, app, version)
             except MissingCredentials as err:
@@ -77,6 +82,9 @@ def main(argv=None):
                             detail=str(err))
             except ASCError as err:
                 report.fail("listing", "could not reach App Store Connect", detail=str(err))
+
+    if args.project:
+        project.run(report, args.project, client=_asc["client"], app=_asc["app"])
 
     if args.json:
         print(report.to_json())
