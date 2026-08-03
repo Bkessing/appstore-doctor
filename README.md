@@ -74,6 +74,39 @@ appstore-doctor --bundle com.acme.app --project ~/code/MyApp
 appstore-doctor --app-id 1234567890 --json
 ```
 
+## With Claude Code
+
+There's a skill in `skills/appstore-doctor/`. Copy it into your skills
+directory and Claude will reach for it whenever you hit a signing or
+submission problem:
+
+```bash
+# available in every project
+mkdir -p ~/.claude/skills
+cp -R skills/appstore-doctor ~/.claude/skills/
+
+# or just this project
+mkdir -p .claude/skills
+cp -R /path/to/appstore-doctor/skills/appstore-doctor .claude/skills/
+```
+
+Then ask it things like *"why is my build failing to sign?"* or *"is 1.4 ready
+to submit?"* and it will run the checks instead of guessing from the error text.
+
+**If you did not `pip install`,** tell the skill where the clone lives, because
+`python3 -m appstore_doctor` only works from inside the repo:
+
+```bash
+export PYTHONPATH=/path/to/appstore-doctor
+```
+
+The skill also carries a translation table from Apple's error strings to what
+they actually mean, which is useful to an agent even before it runs anything.
+`No Accounts` is not a login problem, and `errSecInternalComponent` has nothing
+to do with the framework it names.
+
+Works the same way in any agent that reads `SKILL.md` files.
+
 ### Credentials
 
 Only needed for the App Store Connect checks. From App Store Connect →
