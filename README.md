@@ -123,6 +123,20 @@ A **Developer** role key is enough. The key signs a request locally and talks
 straight to Apple — there is no server in the middle, nothing is uploaded, and
 every request this tool makes is a `GET`.
 
+## The three tools
+
+| | | |
+|---|---|---|
+| [ios-bootstrapper](https://github.com/Bkessing/ios-bootstrapper) | build the app | paid |
+| [ios-release-kit](https://github.com/Bkessing/ios-release-kit) | ship it | free |
+| [appstore-doctor](https://github.com/Bkessing/appstore-doctor) | diagnose it | free |
+
+The two free tools are the whole release story and stand on their own — nothing
+here is crippled to sell you something. **ios-bootstrapper** is the step before
+them: it creates the app itself, with persistence that will not wipe your users
+on update, analytics you can filter your own traffic out of, and the purchase and
+crash-reporting wiring already done.
+
 ## Install both
 
 These are two halves of one job: this one reads, the other writes. Install the
