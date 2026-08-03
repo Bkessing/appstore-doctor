@@ -29,6 +29,36 @@ DISTRIBUTION_TYPES = {"DISTRIBUTION", "IOS_DISTRIBUTION", "MAC_APP_DISTRIBUTION"
 EXPIRY_WARN_DAYS = 30
 
 
+def parse_apple_date(raw):
+    """Parse an App Store Connect timestamp, or return None.
+
+    Apple currently returns `2027-08-01T18:29:30.000+00:00`, which
+    `fromisoformat` handles on Python 3.9. It has also been observed emitting
+    the `+0000` and `Z` spellings, which it does not. Returning None rather
+    than swallowing the error lets the caller SAY it could not read the date
+    instead of silently deciding nothing is expiring — a format change should
+    be visible, not quietly disable the check.
+    """
+    if not raw:
+        return None
+    text = str(raw).strip()
+    candidates = [text]
+    if text.endswith("Z"):
+        candidates.append(text[:-1] + "+00:00")
+    # +0000 -> +00:00
+    if len(text) >= 5 and text[-5] in "+-" and ":" not in text[-5:]:
+        candidates.append(text[:-2] + ":" + text[-2:])
+    for candidate in candidates:
+        try:
+            parsed = datetime.datetime.fromisoformat(candidate)
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+        return parsed
+    return None
+
+
 def _local_fingerprints():
     """SHA-1 fingerprints of certs on this Mac that have a usable private key."""
     try:
@@ -66,7 +96,7 @@ def run(report, client):
     local = _local_fingerprints()
     now = datetime.datetime.now(datetime.timezone.utc)
 
-    rows, missing_key, expired, expiring = [], [], [], []
+    rows, missing_key, expired, expiring, unreadable = [], [], [], [], []
 
     for cert in certs:
         attrs = cert["attributes"]
@@ -87,8 +117,11 @@ def run(report, client):
 
         raw_expiry = attrs.get("expirationDate")
         if raw_expiry:
-            try:
-                exp = datetime.datetime.fromisoformat(raw_expiry.replace("Z", "+00:00"))
+            exp = parse_apple_date(raw_expiry)
+            if exp is None:
+                unreadable.append(name)
+                notes.append(f"unreadable expiry {raw_expiry!r}")
+            else:
                 days = (exp - now).days
                 if days < 0:
                     expired.append(name)
@@ -96,8 +129,6 @@ def run(report, client):
                 elif days < EXPIRY_WARN_DAYS:
                     expiring.append((name, days))
                     notes.append(f"expires in {days}d")
-            except ValueError:
-                pass
 
         if local is not None and fingerprint and fingerprint not in local:
             missing_key.append((name, kind))
@@ -142,6 +173,16 @@ def run(report, client):
             detail=detail,
             fix="Renew before it lapses. Replacing a certificate invalidates every\n"
                 "provisioning profile bound to it, so plan to regenerate those too.",
+        )
+    elif unreadable:
+        # Never report "all good" when a date could not be read — that would be
+        # indistinguishable from a genuinely healthy account.
+        report.warn(
+            "certs.sync",
+            f"could not read the expiry date on {len(unreadable)} certificate(s)",
+            detail=detail,
+            fix="Expiry could not be checked for these. Apple may have changed its date\n"
+                "format; verify expiry by hand in the developer portal.",
         )
     else:
         report.ok("certs.sync",
