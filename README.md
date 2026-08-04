@@ -127,7 +127,7 @@ every request this tool makes is a `GET`.
 
 | | | |
 |---|---|---|
-| [ios-bootstrapper](https://github.com/Bkessing/ios-bootstrapper) | build the app | paid |
+| [ios-bootstrapper](https://github.com/kessinger-tools/ios-bootstrapper) | build the app | paid |
 | [ios-release-kit](https://github.com/Bkessing/ios-release-kit) | ship it | free |
 | [appstore-doctor](https://github.com/Bkessing/appstore-doctor) | diagnose it | free |
 
