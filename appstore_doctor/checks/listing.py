@@ -253,10 +253,82 @@ def check_subscription_metadata(report, client, app, version):
                   f"3.1.2 metadata present ({len(groups)} subscription group(s))")
 
 
+
+def check_stuck_submission(report, client, app):
+    """A rejected submission can hold the version hostage indefinitely.
+
+    Lab Tycoon sat for 18 days in exactly this state. Replying in Resolution
+    Center does NOT resubmit; the submission stays UNRESOLVED_ISSUES, and every
+    attempt to resubmit fails with a message pointing at the version rather than
+    the submission ("Version is not ready to be submitted yet, please try again
+    later"). Nothing in App Store Connect surfaces it, and the version simply
+    reads REJECTED as though the ball were in your court.
+    """
+    try:
+        subs = client.get(
+            f"/reviewSubmissions?filter[app]={app['id']}"
+            f"&filter[platform]=IOS&limit=10"
+        ).get("data", [])
+    except Exception as err:  # noqa: BLE001 - never fatal
+        report.skip("listing.submission", f"could not read review submissions ({err})")
+        return
+
+    stuck = [s for s in subs if s["attributes"].get("state") == "UNRESOLVED_ISSUES"]
+    if not stuck:
+        waiting = [s for s in subs if s["attributes"].get("state") == "WAITING_FOR_REVIEW"]
+        if waiting:
+            report.ok("listing.submission",
+                      f"{len(waiting)} submission(s) waiting for review")
+        else:
+            report.ok("listing.submission", "no submission is stuck")
+        return
+
+    when = (stuck[0]["attributes"].get("submittedDate") or "")[:10]
+    report.fail(
+        "listing.submission",
+        f"a review submission has been in UNRESOLVED_ISSUES since {when}",
+        detail="Replying in Resolution Center does not resubmit.",
+        fix="The version stays attached to this dead submission, so a resubmit fails\n"
+            "with STATE_ERROR.ITEM_PART_OF_ANOTHER_SUBMISSION -- reported against the\n"
+            "VERSION, which sends you looking in the wrong place. To clear it:\n"
+            "  1. POST /v1/reviewSubmissions to create a fresh one\n"
+            "  2. PATCH the stuck one with canceled=true\n"
+            "  3. POST /v1/reviewSubmissionItems to attach the version to the new one\n"
+            "  4. PATCH the new one with submitted=true\n"
+            "Attached IAPs stuck IN_REVIEW free themselves when the parent is\n"
+            "cancelled; there is nothing to withdraw by hand.",
+    )
+
+
+def check_idfa(report, version):
+    """Whether the IDFA question has been answered.
+
+    A WARNING, not a failure. It was tempting to call this blocking after Lab
+    Tycoon's 1.0 refused to submit with usesIdfa null -- but CardHabit 1.2.1 is
+    sitting in review right now with it null too, so it plainly does not always
+    block. Lab Tycoon was held up by a stuck submission, not by this. Answering
+    it is still worth doing, and it may well be required for a first submission
+    where it is not for an update, but a FAIL here would fire on a version that
+    submitted perfectly well.
+    """
+    uses = version["attributes"].get("usesIdfa")
+    if uses is None:
+        report.warn(
+            "listing.idfa", "the IDFA question has never been answered (usesIdfa is null)",
+            fix="Worth answering before you submit. If the app links no ad SDK and does\n"
+                "not import AdSupport or ATTrackingManager, the honest answer is false.\n"
+                "Check before declaring it -- this is a statement to Apple.",
+        )
+    else:
+        report.ok("listing.idfa", f"IDFA declared ({'uses' if uses else 'does not use'} IDFA)")
+
+
 def run(report, client, app):
     check_availability(report, client, app)
+    check_stuck_submission(report, client, app)
     version = check_versions(report, client, app)
     if version:
+        check_idfa(report, version)
         check_screenshots(report, client, version)
         check_subscription_metadata(report, client, app, version)
     return version

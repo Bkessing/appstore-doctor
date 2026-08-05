@@ -358,6 +358,49 @@ class TestAppleDateParsing(unittest.TestCase):
         self.assertEqual(status_of(report, "certs.sync"), WARN)
 
 
+class TestStuckSubmission(unittest.TestCase):
+    """A rejected submission holding the version is invisible in App Store
+    Connect and blocks every resubmit. Lab Tycoon sat in it for 18 days."""
+
+    APP = {"id": "123"}
+
+    def test_unresolved_issues_fails(self):
+        client = FakeClient({"/reviewSubmissions": {"data": [
+            {"id": "a", "attributes": {"state": "UNRESOLVED_ISSUES",
+                                       "submittedDate": "2026-07-18T13:32:02Z"}}]}})
+        r = Report()
+        listing.check_stuck_submission(r, client, self.APP)
+        self.assertEqual(status_of(r, "listing.submission"), FAIL)
+
+    def test_completed_submissions_pass(self):
+        client = FakeClient({"/reviewSubmissions": {"data": [
+            {"id": "a", "attributes": {"state": "COMPLETE"}}]}})
+        r = Report()
+        listing.check_stuck_submission(r, client, self.APP)
+        self.assertEqual(status_of(r, "listing.submission"), OK)
+
+    def test_unreadable_submissions_skip_rather_than_guess(self):
+        class Boom:
+            def get(self, path): raise RuntimeError("403")
+        r = Report()
+        listing.check_stuck_submission(r, Boom(), self.APP)
+        self.assertEqual(status_of(r, "listing.submission"), SKIP)
+
+
+class TestIdfaDeclaration(unittest.TestCase):
+    def test_null_idfa_warns_but_does_not_block(self):
+        # CardHabit 1.2.1 sat in review with usesIdfa null, so a FAIL here would
+        # fire on a version that submitted fine.
+        r = Report()
+        listing.check_idfa(r, {"attributes": {"usesIdfa": None}})
+        self.assertEqual(status_of(r, "listing.idfa"), WARN)
+
+    def test_false_is_an_answer_and_passes(self):
+        r = Report()
+        listing.check_idfa(r, {"attributes": {"usesIdfa": False}})
+        self.assertEqual(status_of(r, "listing.idfa"), OK)
+
+
 class TestReportContract(unittest.TestCase):
     def test_exit_code_is_one_only_when_something_blocks(self):
         r = Report()

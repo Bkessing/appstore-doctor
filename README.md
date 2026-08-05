@@ -187,6 +187,8 @@ the broken thing *is* your fastlane setup.
 | Check | The failure it catches |
 |---|---|
 | App availability | Approved, live, and invisible in every territory |
+| Stuck review submission | A rejected submission still holding the version, so every resubmit fails against the *version* |
+| IDFA declaration | Never answered, which can block a first submission |
 | Version state | Rejected or unsubmitted when you thought otherwise |
 | Attached build | Submitting a version with no build attached |
 | Screenshot sets | Updating 6.5" while 6.9" quietly serves stale artwork |
