@@ -168,6 +168,22 @@ def check_iaps(report, client, app, version):
     # stopping you.
     incomplete = [(p, s) for p, s in products if s == "MISSING_METADATA"]
     approved = [(p, s) for p, s in products if s in IAP_LIVE]
+    in_flight = [(p, s) for p, s in products
+                 if s in {"WAITING_FOR_REVIEW", "IN_REVIEW", "PENDING_BINARY_APPROVAL"}]
+
+    # An app is on sale with nothing to sell whenever ANY version is live, not
+    # just the one being inspected: a newer version sitting in review does not
+    # put the shipped one back in the box.
+    on_sale = version_state in ON_SALE_STATES
+    if not on_sale:
+        try:
+            others = client.get(
+                f"/apps/{app['id']}/appStoreVersions?limit=10&filter[platform]=IOS"
+            ).get("data", [])
+            on_sale = any(v.get("attributes", {}).get("appStoreState") in ON_SALE_STATES
+                          for v in others)
+        except ASCError:
+            pass
 
     if incomplete:
         report.warn(
@@ -179,7 +195,7 @@ def check_iaps(report, client, app, version):
                 "description or review screenshot. It will not be offered to anyone.\n"
                 "Complete it, or delete it so it stops showing up here.",
         )
-    elif version_state in ON_SALE_STATES and not approved:
+    elif on_sale and not approved and not in_flight:
         # The app is on sale and every product it sells is unapproved, so it
         # takes no money at all. This reads as healthy from the outside -- the
         # listing is live, downloads happen, nothing is "blocked" -- which is
@@ -192,10 +208,20 @@ def check_iaps(report, client, app, version):
             f"the app is on sale but none of its {len(products)} in-app "
             "purchases are approved — it can take no money",
             detail=rows,
-            fix="Once the app is live, IAPs are submitted on their own; they do not\n"
-                "need a new binary. Attach each product to a review submission and\n"
-                "submit it. READY_TO_SUBMIT means the metadata is complete and the\n"
-                "product is simply waiting to be sent.",
+            fix="The FIRST consumable and FIRST non-consumable must be submitted WITH\n"
+                "an app version, so a live app carries them on its next release: one\n"
+                "reviewSubmission holding the version AND each product, every item\n"
+                "attached before submitted=true. Confirm each product flips to\n"
+                "WAITING_FOR_REVIEW; no flip means it was never really attached.",
+        )
+    elif on_sale and not approved and in_flight:
+        report.warn(
+            "readiness.iap",
+            f"the app is on sale and cannot take money yet — "
+            f"{len(in_flight)} of {len(products)} product(s) are in review",
+            detail=rows,
+            fix="Nothing to do but wait. Until one product of each type is approved,\n"
+                "the live version sells nothing.",
         )
     elif version_state in NOT_SUBMITTED_STATES and not approved:
         report.warn(

@@ -228,6 +228,17 @@ class TestIAPSeverity(unittest.TestCase):
                          "a live app that can sell nothing is the loudest case, "
                          "not a pass")
 
+    def test_live_app_with_products_in_review_warns_not_fails(self):
+        # Lab Tycoon after 1.0.1 went in carrying both products: still unable to
+        # sell, but nobody forgot anything. FAIL here would cry wolf on every
+        # run until Apple gets round to it.
+        report = Report()
+        readiness.check_iaps(
+            report,
+            self._client(["WAITING_FOR_REVIEW", "WAITING_FOR_REVIEW"]),
+            APP, version("READY_FOR_SALE"))
+        self.assertEqual(status_of(report, "readiness.iap"), WARN)
+
     def test_live_app_with_some_approved_passes(self):
         # One sellable product is a working business; the unapproved sibling is
         # the deliberately-parked case (CardHabit's Elite tier).
