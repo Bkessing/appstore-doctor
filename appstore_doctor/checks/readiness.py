@@ -18,6 +18,9 @@ IAP_LIVE = {"APPROVED"}
 NOT_SUBMITTED_STATES = {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED",
                         "METADATA_REJECTED", "INVALID_BINARY", "DEVELOPER_REMOVED_FROM_SALE"}
 
+# The app itself is on sale to the public.
+ON_SALE_STATES = {"READY_FOR_SALE", "PENDING_DEVELOPER_RELEASE", "APPROVED"}
+
 
 def check_privacy_policy(report, client, app):
     """A privacy policy URL is mandatory. Missing one is a metadata rejection."""
@@ -175,6 +178,24 @@ def check_iaps(report, client, app, version):
             fix="MISSING_METADATA means the product has no localized display name,\n"
                 "description or review screenshot. It will not be offered to anyone.\n"
                 "Complete it, or delete it so it stops showing up here.",
+        )
+    elif version_state in ON_SALE_STATES and not approved:
+        # The app is on sale and every product it sells is unapproved, so it
+        # takes no money at all. This reads as healthy from the outside -- the
+        # listing is live, downloads happen, nothing is "blocked" -- which is
+        # exactly why it needs to be loud. Lab Tycoon shipped 1.0 to the store
+        # on 2026-08-06 with both IAPs sitting in READY_TO_SUBMIT, and this
+        # check reported PASS ("0 of 2 approved") because it only looked for
+        # trouble in the not-yet-submitted states.
+        report.fail(
+            "readiness.iap",
+            f"the app is on sale but none of its {len(products)} in-app "
+            "purchases are approved — it can take no money",
+            detail=rows,
+            fix="Once the app is live, IAPs are submitted on their own; they do not\n"
+                "need a new binary. Attach each product to a review submission and\n"
+                "submit it. READY_TO_SUBMIT means the metadata is complete and the\n"
+                "product is simply waiting to be sent.",
         )
     elif version_state in NOT_SUBMITTED_STATES and not approved:
         report.warn(

@@ -214,6 +214,30 @@ class TestIAPSeverity(unittest.TestCase):
         readiness.check_iaps(report, self._client([]), APP, version())
         self.assertEqual(status_of(report, "readiness.iap"), OK)
 
+    def test_live_app_with_no_approved_iaps_fails(self):
+        # Lab Tycoon, 2026-08-06: 1.0 went READY_FOR_SALE with both products
+        # still in READY_TO_SUBMIT, so the app was on sale and could take no
+        # money. This check reported PASS ("0 of 2 approved") because it only
+        # looked for trouble in the not-yet-submitted states.
+        report = Report()
+        readiness.check_iaps(
+            report,
+            self._client(["READY_TO_SUBMIT", "READY_TO_SUBMIT"]),
+            APP, version("READY_FOR_SALE"))
+        self.assertEqual(status_of(report, "readiness.iap"), FAIL,
+                         "a live app that can sell nothing is the loudest case, "
+                         "not a pass")
+
+    def test_live_app_with_some_approved_passes(self):
+        # One sellable product is a working business; the unapproved sibling is
+        # the deliberately-parked case (CardHabit's Elite tier).
+        report = Report()
+        readiness.check_iaps(
+            report,
+            self._client(["APPROVED", "READY_TO_SUBMIT"]),
+            APP, version("READY_FOR_SALE"))
+        self.assertEqual(status_of(report, "readiness.iap"), OK)
+
     def test_unsubmitted_version_gets_reachability_warning(self):
         # The Guideline 2.1(b) case no API can see, so it must be surfaced.
         report = Report()
