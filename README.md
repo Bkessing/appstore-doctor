@@ -256,6 +256,11 @@ run, so this is safe in CI.
 This diagnoses. It does not fix, and it does not write. A tool that mutates a
 live App Store listing on a bug is not one you should hand an API key to.
 
+## Support
+
+Something it missed, or a false positive? support@brandonkessinger.com. A
+failure mode this does not catch yet is the most useful thing you can send.
+
 ## License
 
 MIT.
