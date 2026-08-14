@@ -8,7 +8,7 @@ import argparse
 import sys
 
 from .report import Report
-from .checks import signing, listing, readiness, certificates, project
+from .checks import signing, listing, readiness, certificates, project, surfaces
 from .asc import Client, MissingCredentials, ASCError
 
 VERSION = "0.1.0"
@@ -77,6 +77,7 @@ def main(argv=None):
                     _asc["client"], _asc["app"] = client, app
                     version = listing.run(report, client, app)
                     readiness.run(report, client, app, version)
+                    surfaces.run(report, client, app)
             except MissingCredentials as err:
                 report.skip("listing", "App Store Connect credentials not configured",
                             detail=str(err))

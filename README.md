@@ -198,6 +198,17 @@ the broken thing *is* your fastlane setup.
 | Age rating | Missing declaration blocks submission |
 | Review demo account | Guideline 2.1 — a reviewer who can't get past your login |
 | In-app purchases | Products stuck in `MISSING_METADATA` that can never sell |
+
+**Free surfaces you are entitled to and not using:**
+
+These never fail a build, which is exactly why they stay empty for the life of an
+app. All are reported as warnings, never failures.
+
+| Check | What is being left unused |
+|---|---|
+| In-App Events | Event cards appear *inside search results* and ship without an app release |
+| Custom product pages | 70 slots, each with its own keywords, able to outrank your default page for them, and the only way to attribute off-store traffic |
+| Game Center | Initialization gates the Top Played chart and social recommendations. Games only; ignore it on a non-game |
 | Export compliance | Missing `ITSAppUsesNonExemptEncryption` blocks submission |
 
 ### What it deliberately does not claim
