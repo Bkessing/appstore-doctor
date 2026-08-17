@@ -107,6 +107,38 @@ to do with the framework it names.
 
 Works the same way in any agent that reads `SKILL.md` files.
 
+## MCP server
+
+The same checks are also reachable as an MCP server, so an agent can call
+`diagnose` or `iap_status` directly instead of shelling out and parsing text.
+
+```bash
+claude mcp add appstore-doctor -- python3 -m appstore_doctor.mcp
+```
+
+Or by hand, in any MCP client's config:
+
+```json
+{
+  "mcpServers": {
+    "appstore-doctor": {
+      "command": "python3",
+      "args": ["-m", "appstore_doctor.mcp"]
+    }
+  }
+}
+```
+
+It exposes `diagnose`, `list_apps`, `version_state`, `iap_status` and
+`signing_check`. Same credentials as the CLI (below), same failure mode when
+they're missing — a tool returns a plain-text error instead of the server
+crashing.
+
+**Why this is safe to hand an agent:** every tool calls straight into the
+same `asc.Client` the CLI uses, and that client has no method that issues
+anything but `GET`. There is no tool here — and no way to add one without
+also changing `asc.py` — that can write to your App Store Connect account.
+
 ### Credentials
 
 Only needed for the App Store Connect checks. From App Store Connect →
