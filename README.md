@@ -1,6 +1,6 @@
 # appstore-doctor
 
-Diagnose why your iOS app won't ship.
+Diagnose why your iOS app won't ship -- and what Apple will flag before Apple flags it.
 
 App Store errors name a symptom, not a cause. A missing distribution certificate
 reports as `No Accounts`. A locked keychain reports as `errSecInternalComponent`
@@ -9,6 +9,11 @@ and invisible in every storefront on Earth.
 
 This reads the actual state of your machine and your App Store Connect account
 and tells you what's wrong in plain language, with the fix.
+
+Run it before you submit and it doubles as a pre-review check: the boring,
+mechanical rejections (missing privacy strings, broken export compliance,
+unattached builds, screenshot sets Apple will bounce) are exactly the ones a
+GET-only reader can catch while your submission is still yours to fix.
 
 **Read-only.** It never writes to your App Store Connect account. Your API key
 never leaves your machine.
