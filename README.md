@@ -167,6 +167,7 @@ every request this tool makes is a `GET`.
 | [ios-bootstrapper](https://brandonkessinger.com/tools/) | build the app | $49 founder |
 | [ios-release-kit](https://github.com/Bkessing/ios-release-kit) | ship it | free |
 | [appstore-doctor](https://github.com/Bkessing/appstore-doctor) | diagnose it | free |
+| [The Factory Floor](https://factory.brandonkessinger.com/) | pick the idea | free |
 
 The two free tools are the whole release story and stand on their own — nothing
 here is crippled to sell you something. **ios-bootstrapper** is the step before
