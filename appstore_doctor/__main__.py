@@ -18,6 +18,19 @@ examples:
   appstore-doctor                              local signing checks only
   appstore-doctor --bundle com.acme.app        add App Store Connect checks
   appstore-doctor --app-id 1234567890 --json   machine-readable output
+  appstore-doctor --bundle com.acme.app --presubmit
+                                               the gate before a submit for review:
+                                               App Store Connect checks only, exit 1
+                                               on anything that would block it
+
+presubmit mode (what a submit lane runs first):
+  Skips the local signing, certificate and surfaces checks (they do not decide
+  whether a submission goes through) and fails on: a first-of-its-kind product
+  left out of the submission, an agreement error, an unanswered age-rating
+  question, a locale with no privacy URL, a required screenshot size missing,
+  no build attached. A name and subtitle sharing a word is a warning.
+  --with-iaps says the submission carries every unapproved in-app purchase
+  (ios-release-kit's submit_with_iaps), so those are not reported as left out.
 
 credentials (App Store Connect checks only):
   ASC_KEY_ID          key id from App Store Connect > Users and Access > Integrations
@@ -44,14 +57,27 @@ def main(argv=None):
     parser.add_argument("--json", action="store_true", help="emit JSON instead of text")
     parser.add_argument("--local-only", action="store_true",
                         help="skip App Store Connect checks entirely")
+    parser.add_argument("--presubmit", action="store_true",
+                        help="pre-submit gate: App Store Connect checks only (see below)")
+    parser.add_argument("--with-iaps", action="store_true",
+                        help="with --presubmit: the submission carries every unapproved IAP")
     parser.add_argument("--no-color", action="store_true")
     parser.add_argument("--version", action="version", version=f"appstore-doctor {VERSION}")
     args = parser.parse_args(argv)
 
     report = Report()
 
-    # Local signing checks always run and never need credentials.
-    signing.run(report, bundle_id=args.bundle)
+    if args.presubmit and args.local_only:
+        parser.error("--presubmit needs App Store Connect; drop --local-only")
+    if args.presubmit and not (args.bundle or args.app_id):
+        parser.error("--presubmit needs --bundle or --app-id")
+    if args.with_iaps and not args.presubmit:
+        parser.error("--with-iaps only applies with --presubmit")
+
+    # Local signing checks never need credentials. A presubmit run skips them:
+    # the build is already uploaded, and a locked keychain must not stop a submit.
+    if not args.presubmit:
+        signing.run(report, bundle_id=args.bundle)
 
     _asc = {"client": None, "app": None}
 
@@ -65,7 +91,8 @@ def main(argv=None):
         else:
             try:
                 client = Client()
-                certificates.run(report, client)
+                if not args.presubmit:
+                    certificates.run(report, client)
                 app = client.find_app(bundle_id=args.bundle, app_id=args.app_id)
                 if not app:
                     report.fail(
@@ -75,12 +102,15 @@ def main(argv=None):
                     )
                 else:
                     _asc["client"], _asc["app"] = client, app
-                    version = listing.run(report, client, app)
-                    readiness.run(report, client, app, version)
-                    surfaces.run(report, client, app)
+                    version = listing.run(report, client, app, presubmit=args.presubmit)
+                    readiness.run(report, client, app, version, with_iaps=args.with_iaps)
+                    if not args.presubmit:
+                        surfaces.run(report, client, app)
             except MissingCredentials as err:
-                report.skip("listing", "App Store Connect credentials not configured",
-                            detail=str(err))
+                # A gate that cannot look must not wave the submit through.
+                (report.fail if args.presubmit else report.skip)(
+                    "listing", "App Store Connect credentials not configured",
+                    detail=str(err))
             except ASCError as err:
                 report.fail("listing", "could not reach App Store Connect", detail=str(err))
 

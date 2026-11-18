@@ -1,0 +1,11 @@
+{
+ "errors": [
+  {
+   "id": "0b1c-example",
+   "status": "409",
+   "code": "IAP_SUBMISSION_NOT_ALLOWED_PROVIDER_MISSING_VALID_CONTRACT",
+   "title": "The request cannot be fulfilled.",
+   "detail": "A valid contract is required."
+  }
+ ]
+}

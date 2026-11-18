@@ -1,0 +1,149 @@
+{
+ "app": {
+  "type": "apps",
+  "id": "222",
+  "attributes": {
+   "bundleId": "com.example.cardhabit",
+   "primaryLocale": "en-US"
+  }
+ },
+ "routes": {
+  "/apps/222/appInfos": {
+   "data": [
+    {
+     "type": "appInfos",
+     "id": "info-live",
+     "attributes": {
+      "appStoreState": "READY_FOR_DISTRIBUTION",
+      "state": "READY_FOR_DISTRIBUTION",
+      "appStoreAgeRating": "4+"
+     }
+    },
+    {
+     "type": "appInfos",
+     "id": "info-edit",
+     "attributes": {
+      "appStoreState": "PREPARE_FOR_SUBMISSION",
+      "state": "PREPARE_FOR_SUBMISSION",
+      "appStoreAgeRating": "4+"
+     }
+    }
+   ]
+  },
+  "/appInfos/info-edit/appInfoLocalizations": {
+   "data": [
+    {
+     "type": "appInfoLocalizations",
+     "id": "edit-en",
+     "attributes": {
+      "locale": "en-US",
+      "name": "CardHabit: Daily Habit Cards",
+      "subtitle": "Four small cards, dealt daily",
+      "privacyPolicyUrl": "https://example.com/privacy"
+     }
+    }
+   ]
+  },
+  "/appInfos/info-edit/ageRatingDeclaration": {
+   "data": {
+    "type": "ageRatingDeclarations",
+    "id": "age-edit",
+    "attributes": {
+     "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+     "contests": "NONE",
+     "gamblingSimulated": "NONE",
+     "gunsOrOtherWeapons": "NONE",
+     "medicalOrTreatmentInformation": "NONE",
+     "profanityOrCrudeHumor": "NONE",
+     "sexualContentGraphicAndNudity": "NONE",
+     "sexualContentOrNudity": "NONE",
+     "horrorOrFearThemes": "NONE",
+     "matureOrSuggestiveThemes": "NONE",
+     "violenceCartoonOrFantasy": "INFREQUENT_OR_MILD",
+     "violenceRealistic": "NONE",
+     "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+     "gambling": false,
+     "unrestrictedWebAccess": false,
+     "lootBox": false,
+     "messagingAndChat": false,
+     "parentalControls": false,
+     "ageAssurance": false,
+     "userGeneratedContent": false,
+     "advertising": false,
+     "healthOrWellnessTopics": false,
+     "socialMedia": null,
+     "socialMediaAgeRestricted": null,
+     "kidsAgeBand": null,
+     "ageRatingOverride": "NONE",
+     "ageRatingOverrideV2": null,
+     "koreaAgeRatingOverride": null,
+     "seventeenPlus": null,
+     "gamblingAndContests": null,
+     "developerAgeRatingInfoUrl": null
+    }
+   }
+  },
+  "/apps/222/inAppPurchasesV2": {
+   "data": [
+    {
+     "type": "inAppPurchases",
+     "id": "iap-coins",
+     "attributes": {
+      "productId": "com.example.ch.coins",
+      "inAppPurchaseType": "CONSUMABLE",
+      "state": "APPROVED"
+     }
+    },
+    {
+     "type": "inAppPurchases",
+     "id": "iap-deck",
+     "attributes": {
+      "productId": "com.example.ch.deck",
+      "inAppPurchaseType": "NON_CONSUMABLE",
+      "state": "READY_TO_SUBMIT"
+     }
+    }
+   ]
+  },
+  "/apps/222/subscriptionGroups": {
+   "data": [
+    {
+     "type": "subscriptionGroups",
+     "id": "g1",
+     "attributes": {
+      "referenceName": "Pro"
+     }
+    }
+   ]
+  },
+  "/subscriptionGroups/g1/subscriptions": {
+   "data": [
+    {
+     "type": "subscriptions",
+     "id": "s1",
+     "attributes": {
+      "productId": "com.example.ch.pro",
+      "state": "APPROVED"
+     }
+    },
+    {
+     "type": "subscriptions",
+     "id": "s2",
+     "attributes": {
+      "productId": "com.example.ch.elite",
+      "state": "READY_TO_SUBMIT"
+     }
+    }
+   ]
+  }
+ },
+ "version": {
+  "type": "appStoreVersions",
+  "id": "ver-20",
+  "attributes": {
+   "versionString": "2.0",
+   "appStoreState": "PREPARE_FOR_SUBMISSION",
+   "releaseType": "MANUAL"
+  }
+ }
+}

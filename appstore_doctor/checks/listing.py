@@ -15,6 +15,11 @@ DISPLAY_SIZES = {
     "APP_IPHONE_65": {(1284, 2778), (1242, 2688)},
 }
 
+# The iPhone size Apple requires: 6.9in, or 6.5in when no 6.9in set exists.
+IPHONE_REQUIRED = ("APP_IPHONE_67", "APP_IPHONE_65")
+# An app that runs on iPad also needs the 13in iPad set (either name).
+IPAD_REQUIRED = ("APP_IPAD_PRO_3GEN_129", "APP_IPAD_PRO_129")
+
 # Guideline 3.1.2 requires these to be discoverable for an auto-renewing sub.
 SUBSCRIPTION_TERMS = ["privacy", "terms", "eula", "policy"]
 
@@ -142,16 +147,22 @@ def check_versions(report, client, app):
     return current
 
 
-def check_screenshots(report, client, version):
-    """Are ALL iPhone screenshot sets populated, and correctly sized?
+def check_screenshots(report, client, version, app=None):
+    """Is a required size present, are ALL iPhone sets populated, and correctly sized?
+
+    Checked on the app's PRIMARY locale: other locales fall back to its
+    screenshots, so a missing required size there blocks the submission.
 
     The trap: updating one display type silently leaves the other serving old
     artwork. APP_IPHONE_67 is what modern iPhones render in search results, so
     a tool that only writes APP_IPHONE_65 looks like it worked and changes
     nothing most people will ever see.
     """
-    locs = [l for l in client.localizations(version["id"])
-            if l["attributes"].get("locale") == "en-US"] or client.localizations(version["id"])
+    primary = ((app or {}).get("attributes") or {}).get("primaryLocale") or "en-US"
+    all_locs = client.localizations(version["id"])
+    locs = ([l for l in all_locs if l["attributes"].get("locale") == primary]
+            or [l for l in all_locs if l["attributes"].get("locale") == "en-US"]
+            or all_locs)
     if not locs:
         report.skip("listing.screenshots", "no localizations found")
         return
@@ -168,6 +179,26 @@ def check_screenshots(report, client, version):
         report.fail("listing.screenshots", "no iPhone screenshot sets exist",
                     fix="At least one iPhone display type is required to submit.")
         return
+
+    locale = locs[0]["attributes"].get("locale")
+    missing = []
+    if not any(by_type.get(d) for d in IPHONE_REQUIRED):
+        missing.append("iPhone 6.9in (APP_IPHONE_67) or 6.5in (APP_IPHONE_65)")
+    ipad = {k: v for k, v in by_type.items() if k.startswith("APP_IPAD")}
+    if ipad and not any(by_type.get(d) for d in IPAD_REQUIRED):
+        missing.append("iPad 13in (APP_IPAD_PRO_3GEN_129)")
+    if missing:
+        report.fail(
+            "listing.screenshots.required",
+            f"no screenshots for a required size in {locale}: {'; '.join(missing)}",
+            detail="\n".join(f"- {d}: {len(s)} screenshots" for d, s in sorted(by_type.items())),
+            fix="Upload at least one screenshot at each required size to the primary\n"
+                "locale. Other locales fall back to it. The iPad set is required only\n"
+                "when the build runs on iPad; an iPad set existing here says it does.",
+        )
+    else:
+        report.ok("listing.screenshots.required",
+                  f"required screenshot sizes present in {locale}")
 
     rows, problems = [], []
     for display, shots in sorted(iphone.items()):
@@ -254,7 +285,7 @@ def check_subscription_metadata(report, client, app, version):
 
 
 
-def check_stuck_submission(report, client, app):
+def check_stuck_submission(report, client, app, presubmit=False):
     """A rejected submission can hold the version hostage indefinitely.
 
     Lab Tycoon sat for 18 days in exactly this state. Replying in Resolution
@@ -284,6 +315,15 @@ def check_stuck_submission(report, client, app):
         return
 
     when = (stuck[0]["attributes"].get("submittedDate") or "")[:10]
+    if presubmit:
+        # ios-release-kit's submit lanes cancel an UNRESOLVED_ISSUES submission
+        # themselves before attaching, so this must not stop them.
+        report.warn(
+            "listing.submission",
+            f"a review submission has been in UNRESOLVED_ISSUES since {when}",
+            detail="The submit lane cancels it before attaching the version.",
+        )
+        return
     report.fail(
         "listing.submission",
         f"a review submission has been in UNRESOLVED_ISSUES since {when}",
@@ -323,12 +363,12 @@ def check_idfa(report, version):
         report.ok("listing.idfa", f"IDFA declared ({'uses' if uses else 'does not use'} IDFA)")
 
 
-def run(report, client, app):
+def run(report, client, app, presubmit=False):
     check_availability(report, client, app)
-    check_stuck_submission(report, client, app)
+    check_stuck_submission(report, client, app, presubmit=presubmit)
     version = check_versions(report, client, app)
     if version:
         check_idfa(report, version)
-        check_screenshots(report, client, version)
+        check_screenshots(report, client, version, app)
         check_subscription_metadata(report, client, app, version)
     return version
