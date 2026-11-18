@@ -150,7 +150,7 @@ def check_age_rating(report, client, app):
             fix="Answer each one in App Store Connect > App Information > Age Rating, or\n"
                 "PATCH /v1/ageRatingDeclarations/<id>. Each answer is a statement to\n"
                 "Apple about the app: decide it from what the app does, never by default.",
-            data={"unanswered": missing},
+            data={"unanswered": missing, "attributes": attrs},
         )
         return
 
@@ -159,6 +159,7 @@ def check_age_rating(report, client, app):
         "readiness.age_rating",
         f"age rating declared{f' ({store_rating})' if store_rating else ''}",
         detail=f"{len(answered)} non-default answers recorded",
+        data={"attributes": attrs},
     )
 
 
