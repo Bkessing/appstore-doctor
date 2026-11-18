@@ -238,6 +238,7 @@ the broken thing *is* your fastlane setup.
 |---|---|
 | App icon alpha channel | ITMS-90717 — and note Apple rejects an icon that *has* an alpha channel, so a fully opaque RGBA export still fails |
 | Privacy manifest | A linked SDK on Apple's required list with no `PrivacyInfo.xcprivacy` |
+| Privacy manifest vs events | The app's analytics code sends purchase events, any events, or loads a crash reporter, and the manifest does not declare PurchaseHistory, ProductInteraction or CrashData. Runs in `--presubmit` when `--project` is given |
 | Build number | Uploading a `CURRENT_PROJECT_VERSION` that already exists |
 
 **Against App Store Connect:**

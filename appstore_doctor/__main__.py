@@ -29,6 +29,8 @@ presubmit mode (what a submit lane runs first):
   left out of the submission, an agreement error, an unanswered age-rating
   question, a locale with no privacy URL, a required screenshot size missing,
   no build attached. A name and subtitle sharing a word is a warning.
+  With --project, it also fails when the app's analytics code sends data its
+  privacy manifest does not declare (purchase events with no PurchaseHistory).
   --with-iaps says the submission carries every unapproved in-app purchase
   (ios-release-kit's submit_with_iaps), so those are not reported as left out.
 
@@ -115,7 +117,8 @@ def main(argv=None):
                 report.fail("listing", "could not reach App Store Connect", detail=str(err))
 
     if args.project:
-        project.run(report, args.project, client=_asc["client"], app=_asc["app"])
+        project.run(report, args.project, client=_asc["client"], app=_asc["app"],
+                    presubmit=args.presubmit)
 
     if args.json:
         print(report.to_json())

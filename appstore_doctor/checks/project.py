@@ -181,6 +181,115 @@ def check_privacy_manifest(report, root):
         )
 
 
+# What an app's own analytics code sends, mapped to the collected-data type its
+# privacy manifest must then declare. Matched on event NAMES and imports in the
+# app's Swift source, so it is a floor, not a proof: an event called "buy_done"
+# would slip through. Lab Tycoon 1.1 sent "iap_purchased" with no PurchaseHistory
+# declared, which is the case this exists for.
+# The first argument of an analytics call, up to its first comma or close paren.
+# Every string literal in it counts, so `capture(open ? "a" : "b")` sees both.
+CAPTURE_CALL = re.compile(r"\b(?:capture|track|logEvent|trackEvent)\(([^,)]*)")
+STRING_LITERAL = re.compile(r"\"([A-Za-z0-9_.:\- ]+)\"")
+PRIVACY_EVENT_RULES = (
+    # (collected type, what triggers it, test on an event name or None, import regex or None)
+    ("NSPrivacyCollectedDataTypePurchaseHistory", "purchase events",
+     re.compile(r"purchas|(^|_)iap(_|$)|subscri|checkout", re.I), None),
+    ("NSPrivacyCollectedDataTypeProductInteraction", "analytics events",
+     re.compile(r"."), None),
+    ("NSPrivacyCollectedDataTypeCrashData", "a crash reporter",
+     None, re.compile(r"^\s*import\s+(Sentry|FirebaseCrashlytics|Bugsnag)\b", re.M)),
+)
+SOURCE_SKIP_DIRS = ("/.build/", "/Pods/", "/DerivedData/", "/Tests/", "Tests/", "/fastlane/", "/.git/")
+
+
+def _app_sources(root):
+    for path in glob.glob(os.path.join(root, "**", "*.swift"), recursive=True):
+        rel = "/" + os.path.relpath(path, root).replace(os.sep, "/")
+        if any(skip in rel for skip in SOURCE_SKIP_DIRS):
+            continue
+        try:
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                yield rel.lstrip("/"), handle.read()
+        except OSError:
+            continue
+
+
+def declared_data_types(manifest_path):
+    """Collected-data types a PrivacyInfo.xcprivacy declares, or None if unreadable."""
+    try:
+        with open(manifest_path, "rb") as handle:
+            data = plistlib.load(handle)
+    except (OSError, plistlib.InvalidFileException, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    out = set()
+    for entry in data.get("NSPrivacyCollectedDataTypes") or []:
+        if isinstance(entry, dict) and entry.get("NSPrivacyCollectedDataType"):
+            out.add(entry["NSPrivacyCollectedDataType"])
+    return out
+
+
+def check_privacy_events(report, root):
+    """The manifest must declare what the app's own analytics code sends."""
+    manifests = [m for m in glob.glob(os.path.join(root, "**", "PrivacyInfo.xcprivacy"), recursive=True)
+                 if "/Pods/" not in m and "/.build/" not in m]
+    events, imports = {}, {}
+    for rel, text in _app_sources(root):
+        for arg in CAPTURE_CALL.findall(text):
+            for name in STRING_LITERAL.findall(arg):
+                events.setdefault(name, rel)
+        for ctype, _why, _ev, imp in PRIVACY_EVENT_RULES:
+            if imp is not None and imp.search(text):
+                imports.setdefault(ctype, rel)
+    needed = {}
+    for ctype, why, ev, imp in PRIVACY_EVENT_RULES:
+        hits = sorted(n for n in events if ev is not None and ev.search(n))
+        if hits:
+            needed[ctype] = (why, hits[:3], events[hits[0]])
+        elif ctype in imports:
+            needed[ctype] = (why, [], imports[ctype])
+    if not needed:
+        report.ok("project.privacy_events", "no analytics events or crash reporter found to declare")
+        return
+    if not manifests:
+        report.fail(
+            "project.privacy_events",
+            "the app sends analytics but has no PrivacyInfo.xcprivacy",
+            detail=", ".join(sorted(t.replace("NSPrivacyCollectedDataType", "") for t in needed)),
+            fix="Add a privacy manifest to the app target that declares each data type above.",
+        )
+        return
+    declared = set()
+    for m in manifests:
+        types = declared_data_types(m)
+        if types is None:
+            report.fail("project.privacy_events", f"could not read {os.path.relpath(m, root)}",
+                        fix="Fix the plist so Xcode and this check can parse it.")
+            return
+        declared |= types
+    missing = {t: v for t, v in needed.items() if t not in declared}
+    if not missing:
+        report.ok("project.privacy_events",
+                  f"manifest declares what the code sends ({len(needed)} type(s) checked)")
+        return
+    lines = []
+    for ctype, (why, hits, where) in sorted(missing.items()):
+        short = ctype.replace("NSPrivacyCollectedDataType", "")
+        seen = ", ".join(hits) if hits else "import"
+        lines.append(f"{short}: the app sends {why} ({seen}; {where})")
+    first = sorted(missing)[0].replace("NSPrivacyCollectedDataType", "")
+    report.fail(
+        "project.privacy_events",
+        f"privacy manifest does not declare {', '.join(sorted(t.replace('NSPrivacyCollectedDataType', '') for t in missing))}",
+        detail="\n".join(lines),
+        fix=f"Add an NSPrivacyCollectedDataTypes entry for each missing type (for example\n"
+            f"NSPrivacyCollectedDataType{first}, linked as the app links its other analytics,\n"
+            "purpose Analytics), and tick the same type in App Store Connect > App Privacy.",
+        data={"missing": sorted(missing)},
+    )
+
+
 # Ways a release lane commonly overwrites the build number at build time. Any of
 # these means the checked-in CURRENT_PROJECT_VERSION is not what gets uploaded.
 STAMP_MARKERS = (
@@ -286,11 +395,17 @@ def check_build_number(report, root, client=None, app=None):
     )
 
 
-def run(report, root, client=None, app=None):
+def run(report, root, client=None, app=None, presubmit=False):
     root = os.path.abspath(os.path.expanduser(root))
     if not os.path.isdir(root):
-        report.skip("project", f"{root} is not a directory")
+        (report.fail if presubmit else report.skip)("project", f"{root} is not a directory")
+        return
+    if presubmit:
+        # The build is already uploaded: icon and build number are settled. What
+        # still decides the submit is whether the privacy story matches the code.
+        check_privacy_events(report, root)
         return
     check_app_icon(report, root)
     check_privacy_manifest(report, root)
+    check_privacy_events(report, root)
     check_build_number(report, root, client=client, app=app)

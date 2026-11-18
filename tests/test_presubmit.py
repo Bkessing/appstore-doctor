@@ -304,3 +304,97 @@ class TestPresubmitCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPrivacyEvents(unittest.TestCase):
+    """The manifest must declare what the app's analytics code sends (hq #373)."""
+
+    LAB = os.path.join(FIXTURES, "lab-tycoon-1.1-privacy")
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.app = os.path.join(self.tmp, "app")
+        shutil.copytree(self.LAB, self.app)
+        self.manifest = os.path.join(self.app, "Sources", "App", "PrivacyInfo.xcprivacy")
+
+    def _run(self, root=None):
+        from appstore_doctor.checks import project
+        r = Report()
+        project.check_privacy_events(r, root or self.app)
+        return r
+
+    def _add_type(self, ctype):
+        import plistlib
+        with open(self.manifest, "rb") as handle:
+            data = plistlib.load(handle)
+        data["NSPrivacyCollectedDataTypes"].append({"NSPrivacyCollectedDataType": ctype})
+        with open(self.manifest, "wb") as handle:
+            plistlib.dump(data, handle)
+
+    def test_lab_tycoon_1_1_fails_on_purchase_history(self):
+        r = self._run(self.LAB)
+        self.assertEqual(status_of(r, "project.privacy_events"), FAIL)
+        f = [x for x in r.findings if x.check == "project.privacy_events"][0]
+        self.assertIn("PurchaseHistory", f.summary)
+        self.assertIn("iap_purchased", f.detail)
+        self.assertNotIn("checkout_test", f.detail)  # test code is ignored
+        self.assertEqual(f.data["missing"], ["NSPrivacyCollectedDataTypePurchaseHistory"])
+
+    def test_declared_purchase_history_passes(self):
+        self._add_type("NSPrivacyCollectedDataTypePurchaseHistory")
+        self.assertEqual(status_of(self._run(), "project.privacy_events"), OK)
+
+    def test_crash_reporter_without_crash_data_fails(self):
+        self._add_type("NSPrivacyCollectedDataTypePurchaseHistory")
+        import plistlib
+        with open(self.manifest, "rb") as handle:
+            data = plistlib.load(handle)
+        data["NSPrivacyCollectedDataTypes"] = [
+            e for e in data["NSPrivacyCollectedDataTypes"]
+            if e["NSPrivacyCollectedDataType"] != "NSPrivacyCollectedDataTypeCrashData"]
+        with open(self.manifest, "wb") as handle:
+            plistlib.dump(data, handle)
+        r = self._run()
+        self.assertEqual(status_of(r, "project.privacy_events"), FAIL)
+        self.assertIn("CrashData", [x for x in r.findings if x.check == "project.privacy_events"][0].summary)
+
+    def test_events_with_no_manifest_fail(self):
+        os.remove(self.manifest)
+        self.assertEqual(status_of(self._run(), "project.privacy_events"), FAIL)
+
+    def test_app_with_no_analytics_passes(self):
+        empty = os.path.join(self.tmp, "empty")
+        os.makedirs(empty)
+        with open(os.path.join(empty, "App.swift"), "w") as handle:
+            handle.write("struct App {}\n")
+        self.assertEqual(status_of(self._run(empty), "project.privacy_events"), OK)
+
+    def test_presubmit_runs_only_the_privacy_line(self):
+        from appstore_doctor.checks import project
+        r = Report()
+        project.run(r, self.app, presubmit=True)
+        self.assertEqual({f.check for f in r.findings}, {"project.privacy_events"})
+        self.assertEqual(r.exit_code(), 1)
+
+    def test_presubmit_missing_project_dir_fails(self):
+        from appstore_doctor.checks import project
+        r = Report()
+        project.run(r, os.path.join(self.tmp, "nope"), presubmit=True)
+        self.assertEqual(status_of(r, "project"), FAIL)
+
+    def test_ternary_event_names_are_seen(self):
+        with open(os.path.join(self.app, "Sources", "App", "Monetization.swift"), "w") as handle:
+            handle.write('func f(ok: Bool) { Analytics.capture(ok ? "purchase_completed" : "shop_closed", [:]) }\n')
+        r = self._run()
+        f = [x for x in r.findings if x.check == "project.privacy_events"][0]
+        self.assertEqual(f.status, FAIL)
+        self.assertIn("purchase_completed", f.detail)
+
+    def test_manifest_with_array_root_fails_cleanly(self):
+        import plistlib
+        with open(self.manifest, "wb") as handle:
+            plistlib.dump(["not", "a", "dict"], handle)
+        self.assertEqual(status_of(self._run(), "project.privacy_events"), FAIL)
