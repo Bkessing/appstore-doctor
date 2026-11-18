@@ -203,6 +203,20 @@ class TestIAPSeverity(unittest.TestCase):
         self.assertEqual(status_of(report, "readiness.iap"), WARN,
                          "incomplete IAPs cannot sell but do not block submission")
 
+    def test_in_review_product_is_not_listed_as_incomplete(self):
+        # CardHabit, Mac run 2026-11-18: a WAITING_FOR_REVIEW pack was listed
+        # under "incomplete and cannot sell".
+        report = Report()
+        readiness.check_iaps(report, self._client(
+            ["MISSING_METADATA", "WAITING_FOR_REVIEW", "APPROVED"]),
+            APP, version("READY_FOR_SALE"))
+        f = next(f for f in report.findings if f.check == "readiness.iap")
+        self.assertEqual(f.status, WARN)
+        self.assertIn("1 of 3", f.summary)
+        self.assertIn("- p0: MISSING_METADATA", f.detail)
+        self.assertNotIn("- p1", f.detail)
+        self.assertIn("pending, not incomplete): p1", f.detail)
+
     def test_all_approved_passes(self):
         report = Report()
         readiness.check_iaps(report, self._client(["APPROVED", "APPROVED"]),

@@ -8,6 +8,8 @@ Everything here was confirmed readable against the live API before it was
 written; checks are not speculative.
 """
 
+import re
+
 from ..asc import ASCError
 
 # IAP/subscription states that are fine to submit alongside a binary.
@@ -22,16 +24,41 @@ NOT_SUBMITTED_STATES = {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTE
 ON_SALE_STATES = {"READY_FOR_SALE", "PENDING_DEVELOPER_RELEASE", "APPROVED"}
 
 
+# An app has two appInfo records while an update is being prepared: the live
+# one and the editable one. Reading infos[0] checked whichever Apple listed
+# first, which on 2026-11-18 was the live record, so six locales with no privacy
+# URL on Mint Condition 1.1's editable record passed here and then failed the
+# submit with a 409.
+LIVE_INFO_STATES = {"READY_FOR_DISTRIBUTION", "READY_FOR_SALE"}
+
+
+def editable_app_info(client, app):
+    """The appInfo a submission will use: the one not yet live, else the only one."""
+    infos = client.get(f"/apps/{app['id']}/appInfos?limit=10").get("data", [])
+    if not infos:
+        return None
+
+    def state(info):
+        attrs = info.get("attributes") or {}
+        return attrs.get("state") or attrs.get("appStoreState")
+
+    return next((i for i in infos if state(i) not in LIVE_INFO_STATES), infos[0])
+
+
+def app_info_localizations(client, info):
+    return client.get(
+        f"/appInfos/{info['id']}/appInfoLocalizations?limit=50"
+    ).get("data", [])
+
+
 def check_privacy_policy(report, client, app):
-    """A privacy policy URL is mandatory. Missing one is a metadata rejection."""
+    """A privacy policy URL is mandatory in EVERY locale. Missing one is a 409 at submit."""
     try:
-        infos = client.get(f"/apps/{app['id']}/appInfos?limit=5").get("data", [])
-        if not infos:
+        info = editable_app_info(client, app)
+        if not info:
             report.skip("readiness.privacy_policy", "no appInfo record found")
             return
-        locs = client.get(
-            f"/appInfos/{infos[0]['id']}/appInfoLocalizations?limit=50"
-        ).get("data", [])
+        locs = app_info_localizations(client, info)
     except ASCError as err:
         report.skip("readiness.privacy_policy", f"could not read app info ({err})")
         return
@@ -45,23 +72,56 @@ def check_privacy_policy(report, client, app):
         report.fail(
             "readiness.privacy_policy",
             f"no privacy policy URL set for: {', '.join(missing)}",
-            fix="Every app needs a privacy policy URL, and it must resolve. Set it in\n"
-                "App Store Connect > App Information > Privacy Policy URL.\n"
-                "Or, with ios-release-kit:  URL=<your-url> fastlane set_privacy_policy",
+            detail="Checked the editable app info, the one this submission will use.\n"
+                   "Adding a locale (new store text) adds a localization with an EMPTY\n"
+                   "privacy URL; the en-US one is not inherited.",
+            fix="Every locale needs a privacy policy URL, and it must resolve. Set the same\n"
+                "URL the other locales carry on each one listed, in App Store Connect >\n"
+                "App Information (switch language at the top), or by PATCHing\n"
+                "privacyPolicyUrl on each appInfoLocalization.",
         )
     else:
         report.ok("readiness.privacy_policy",
                   f"privacy policy URL set for {len(locs)} localization(s)")
 
 
+# Age-rating attributes that are legitimately null on a complete declaration:
+# overrides, the kids band, an optional info URL, fields Apple has retired, and
+# the Korea GRAC rating number (null on all three apps Apple accepted for review
+# on 2026-11-18: CardHabit 2.0, Mint Condition 1.1, Lab Tycoon 1.1).
+# Everything else that is null is a question nobody answered, and a NEW question
+# from Apple shows up exactly that way: `socialMedia` arrived in late Oct 2026
+# as a null field and blocked CardHabit 2.0's submit on 2026-11-18 with an
+# error reported against the version, not the rating.
+AGE_RATING_OPTIONAL = {
+    "kidsAgeBand", "ageRatingOverride", "ageRatingOverrideV2", "koreaAgeRatingOverride",
+    "developerAgeRatingInfoUrl", "seventeenPlus", "gamblingAndContests",
+    "gracRatingClassificationNumber",
+}
+# Follow-up questions: required only when the parent answer is true.
+AGE_RATING_FOLLOW_UPS = {"socialMediaAgeRestricted": "socialMedia"}
+
+
+def unanswered_age_rating_fields(attrs):
+    missing = []
+    for key, value in sorted(attrs.items()):
+        if value is not None or key in AGE_RATING_OPTIONAL:
+            continue
+        parent = AGE_RATING_FOLLOW_UPS.get(key)
+        if parent and attrs.get(parent) is not True:
+            continue
+        missing.append(key)
+    return missing
+
+
 def check_age_rating(report, client, app):
-    """An age rating declaration must exist before a version can be submitted."""
+    """Every age-rating question must be answered, including ones Apple added recently."""
     try:
-        infos = client.get(f"/apps/{app['id']}/appInfos?limit=5").get("data", [])
-        if not infos:
+        info = editable_app_info(client, app)
+        if not info:
             report.skip("readiness.age_rating", "no appInfo record found")
             return
-        rating = client.get(f"/appInfos/{infos[0]['id']}/ageRatingDeclaration")
+        rating = client.get(f"/appInfos/{info['id']}/ageRatingDeclaration")
     except ASCError as err:
         if "404" in str(err):
             report.fail(
@@ -74,18 +134,86 @@ def check_age_rating(report, client, app):
         return
 
     attrs = (rating.get("data") or {}).get("attributes") or {}
-    answered = [k for k, v in attrs.items() if v not in (None, "", False)]
-    store_rating = ((client.get(f"/apps/{app['id']}/appInfos?limit=1")
-                    .get("data") or [{}])[0].get("attributes") or {}).get("appStoreAgeRating")
+    store_rating = (info.get("attributes") or {}).get("appStoreAgeRating")
 
     if not attrs:
         report.warn("readiness.age_rating", "age rating declaration is empty")
-    else:
-        report.ok(
+        return
+
+    missing = unanswered_age_rating_fields(attrs)
+    if missing:
+        report.fail(
             "readiness.age_rating",
-            f"age rating declared{f' ({store_rating})' if store_rating else ''}",
-            detail=f"{len(answered)} non-default answers recorded",
+            f"{len(missing)} age-rating question(s) unanswered: {', '.join(missing)}",
+            detail="A null answer blocks submission. Apple adds questions without notice\n"
+                   "(socialMedia, late Oct 2026), and the submit error names the VERSION.",
+            fix="Answer each one in App Store Connect > App Information > Age Rating, or\n"
+                "PATCH /v1/ageRatingDeclarations/<id>. Each answer is a statement to\n"
+                "Apple about the app: decide it from what the app does, never by default.",
+            data={"unanswered": missing},
         )
+        return
+
+    answered = [k for k, v in attrs.items() if v not in (None, "", False, "NONE")]
+    report.ok(
+        "readiness.age_rating",
+        f"age rating declared{f' ({store_rating})' if store_rating else ''}",
+        detail=f"{len(answered)} non-default answers recorded",
+    )
+
+
+# Words that may repeat between name and subtitle without wasting search weight.
+_FILLER = {"a", "an", "and", "the", "of", "for", "to", "in", "on", "with", "your",
+           "my", "by", "&", "+", "-", "at", "or"}
+
+
+def _words(text):
+    out = set()
+    for w in re.findall(r"[^\W_]+", (text or "").lower()):
+        # Under 3 letters is mostly locale filler ("de", "la", "et"); skip it.
+        if w in _FILLER or len(w) < 3:
+            continue
+        # Plural and singular are the same keyword to the store index.
+        out.add(w[:-1] if len(w) > 3 and w.endswith("s") else w)
+    return out
+
+
+def check_name_subtitle(report, client, app):
+    """A word in both the name and the subtitle is indexed once: the repeat is wasted.
+
+    A warning, never a block. Apple accepts it; it just spends characters that
+    could carry another search term. CardHabit 2.0's rename on 2026-11-18 was
+    held for exactly this ("cards", "daily" in both).
+    """
+    try:
+        info = editable_app_info(client, app)
+        if not info:
+            return
+        locs = app_info_localizations(client, info)
+    except ASCError as err:
+        report.skip("readiness.name_subtitle", f"could not read app info ({err})")
+        return
+
+    rows = []
+    for loc in locs:
+        attrs = loc.get("attributes") or {}
+        shared = _words(attrs.get("name")) & _words(attrs.get("subtitle"))
+        if shared:
+            rows.append(f"- {attrs.get('locale')}: \"{attrs.get('name')}\" / "
+                        f"\"{attrs.get('subtitle')}\" share {', '.join(sorted(shared))}")
+
+    if rows:
+        report.warn(
+            "readiness.name_subtitle",
+            f"name and subtitle repeat a word in {len(rows)} locale(s)",
+            detail="\n".join(rows),
+            fix="The store indexes name, subtitle and keywords together, so a repeated\n"
+                "word earns nothing twice. Keep it if it reads better; otherwise swap the\n"
+                "repeat in the subtitle for a term the app does not rank for yet.",
+        )
+    elif locs:
+        report.ok("readiness.name_subtitle",
+                  f"no repeated words between name and subtitle ({len(locs)} locale(s))")
 
 
 def check_review_details(report, client, version):
@@ -136,8 +264,13 @@ def check_review_details(report, client, version):
         report.warn("readiness.review_details.contact", "no review contact email set")
 
 
-def check_iaps(report, client, app, version):
-    """In-app purchases must be submitted alongside the binary, in a valid state."""
+def check_iaps(report, client, app, version, with_iaps=False):
+    """In-app purchases must be submitted alongside the binary, in a valid state.
+
+    with_iaps: the caller's submission will carry every unapproved in-app
+    purchase (ios-release-kit's submit_with_iaps passes it). It does not carry
+    subscriptions, so those are still checked.
+    """
     try:
         iaps = client.get(f"/apps/{app['id']}/inAppPurchasesV2?limit=200").get("data", [])
         groups = client.get(f"/apps/{app['id']}/subscriptionGroups?limit=50").get("data", [])
@@ -149,6 +282,8 @@ def check_iaps(report, client, app, version):
     except ASCError as err:
         report.skip("readiness.iap", f"could not read in-app purchases ({err})")
         return
+
+    check_iap_submission(report, iaps, subs, version, with_iaps)
 
     products = [(i["attributes"].get("productId"), i["attributes"].get("state"))
                 for i in iaps]
@@ -190,7 +325,9 @@ def check_iaps(report, client, app, version):
             "readiness.iap",
             f"{len(incomplete)} of {len(products)} in-app purchases are incomplete "
             "and cannot sell",
-            detail=rows,
+            detail="\n".join(f"- {pid}: {state}" for pid, state in incomplete)
+                   + (f"\nIn review (pending, not incomplete): "
+                      f"{', '.join(p for p, _ in in_flight)}" if in_flight else ""),
             fix="MISSING_METADATA means the product has no localized display name,\n"
                 "description or review screenshot. It will not be offered to anyone.\n"
                 "Complete it, or delete it so it stops showing up here.",
@@ -247,6 +384,112 @@ def check_iaps(report, client, app, version):
         )
 
 
+# Product states that will not be reviewed unless something attaches them.
+IAP_UNSUBMITTED = {"READY_TO_SUBMIT", "DEVELOPER_ACTION_NEEDED", "REJECTED"}
+# States a version can be submitted from (READY_FOR_REVIEW: attached to a draft
+# submission that has not been sent yet).
+SUBMITTABLE_STATES = NOT_SUBMITTED_STATES | {"READY_FOR_REVIEW"}
+
+
+def check_iap_submission(report, iaps, subs, version, with_iaps=False):
+    """An unapproved product that is the FIRST of its kind must ride with this version.
+
+    Apple refuses a first consumable or first non-consumable submitted on its
+    own (FIRST_NON_CONSUMABLE_MUST_BE_SUBMITTED_ON_VERSION, 2026-11-18), and a
+    version submitted without it goes live unable to sell (Lab Tycoon 1.0,
+    2026-08-06). An unapproved product whose kind already has an approved
+    sibling can be submitted later, so it only warns: it may be parked on purpose
+    (CardHabit's Elite tier).
+    """
+    if version["attributes"].get("appStoreState") not in SUBMITTABLE_STATES:
+        return
+
+    def attrs(p):
+        return p.get("attributes") or {}
+
+    approved_kinds = {attrs(i).get("inAppPurchaseType") for i in iaps
+                      if attrs(i).get("state") in IAP_LIVE}
+    sub_approved = any(attrs(s).get("state") in IAP_LIVE for s in subs)
+
+    first, later = [], []
+    for i in iaps:
+        a = attrs(i)
+        if a.get("state") not in IAP_UNSUBMITTED:
+            continue
+        row = f"{a.get('productId')} ({a.get('inAppPurchaseType') or 'in-app purchase'}, {a.get('state')})"
+        if with_iaps:
+            continue
+        (later if a.get("inAppPurchaseType") in approved_kinds else first).append(row)
+    for sub in subs:
+        a = attrs(sub)
+        if a.get("state") not in IAP_UNSUBMITTED:
+            continue
+        row = f"{a.get('productId')} (subscription, {a.get('state')})"
+        (later if sub_approved else first).append(row)
+
+    if first:
+        report.fail(
+            "readiness.iap.submission",
+            f"{len(first)} first-of-its-kind product(s) are not in this submission",
+            detail="\n".join(f"- {r}" for r in first + later),
+            fix="A first consumable, non-consumable or subscription must be submitted WITH\n"
+                "a version. In-app purchases: use ios-release-kit's submit_with_iaps\n"
+                "(DRY=1 first; afterwards confirm the version AND each product read\n"
+                "WAITING_FOR_REVIEW). It does not carry subscriptions: attach those to the\n"
+                "same review submission before it is submitted.",
+        )
+    elif later:
+        report.warn(
+            "readiness.iap.submission",
+            f"{len(later)} unapproved product(s) will not be reviewed with this version",
+            detail="\n".join(f"- {r}" for r in later),
+            fix="Fine if they are parked on purpose. Otherwise submit them with the\n"
+                "version (submit_with_iaps) or on their own.",
+        )
+    elif with_iaps and any(attrs(i).get("state") in IAP_UNSUBMITTED for i in iaps):
+        report.ok("readiness.iap.submission",
+                  "unapproved in-app purchases will ride with this version (submit_with_iaps)")
+
+
+def check_agreements(report, client, app, version):
+    """An inactive agreement blocks submission, and the API cannot read agreements.
+
+    /v1/agreements is a 404. The only machine signal is an error code on some
+    other request, so this runs LAST and reports any such code seen during the
+    run. Without one, a product submission still gets a reminder, because the
+    contract error only appears at submit time (CardHabit and The Stoics,
+    2026-11-18: IAP_SUBMISSION_NOT_ALLOWED_PROVIDER_MISSING_VALID_CONTRACT).
+    """
+    seen = list(getattr(client, "agreement_errors", []) or [])
+    if seen:
+        report.fail(
+            "readiness.agreements",
+            "Apple reports a missing or expired agreement",
+            detail="\n".join(f"- {e}" for e in seen),
+            fix="Open App Store Connect > Business and accept every pending agreement\n"
+                "(the Paid Applications Agreement for anything that sells). Only the\n"
+                "Account Holder can accept one. Re-run this check afterwards.",
+        )
+        return
+
+    if not version or version["attributes"].get("appStoreState") not in SUBMITTABLE_STATES:
+        return
+    try:
+        iaps = client.get(f"/apps/{app['id']}/inAppPurchasesV2?limit=200").get("data", [])
+    except ASCError:
+        return
+    unapproved = [i for i in iaps
+                  if (i.get("attributes") or {}).get("state") in IAP_UNSUBMITTED]
+    if unapproved:
+        report.warn(
+            "readiness.agreements",
+            "products are going to review: the Paid Applications Agreement must be Active",
+            fix="The API cannot read agreements. Check App Store Connect > Business shows\n"
+                "the Paid Applications Agreement as Active before submitting. If it is not,\n"
+                "the product submit fails with ..._PROVIDER_MISSING_VALID_CONTRACT.",
+        )
+
+
 def check_export_compliance(report, client, version):
     """A build with no encryption declaration cannot be submitted."""
     build = client.build_for_version(version["id"])
@@ -276,10 +519,13 @@ def check_export_compliance(report, client, version):
         report.ok("readiness.export_compliance", "export compliance declared (exempt)")
 
 
-def run(report, client, app, version):
+def run(report, client, app, version, with_iaps=False):
     check_privacy_policy(report, client, app)
     check_age_rating(report, client, app)
+    check_name_subtitle(report, client, app)
     if version:
         check_review_details(report, client, version)
-        check_iaps(report, client, app, version)
+        check_iaps(report, client, app, version, with_iaps=with_iaps)
         check_export_compliance(report, client, version)
+    # Last: it reports agreement errors seen by every request above.
+    check_agreements(report, client, app, version)

@@ -1,0 +1,267 @@
+{
+ "app": {
+  "type": "apps",
+  "id": "111",
+  "attributes": {
+   "bundleId": "com.example.mint",
+   "primaryLocale": "en-US"
+  }
+ },
+ "routes": {
+  "/apps/111/appInfos": {
+   "data": [
+    {
+     "type": "appInfos",
+     "id": "info-live",
+     "attributes": {
+      "appStoreState": "READY_FOR_DISTRIBUTION",
+      "state": "READY_FOR_DISTRIBUTION",
+      "appStoreAgeRating": "4+"
+     }
+    },
+    {
+     "type": "appInfos",
+     "id": "info-edit",
+     "attributes": {
+      "appStoreState": "PREPARE_FOR_SUBMISSION",
+      "state": "PREPARE_FOR_SUBMISSION",
+      "appStoreAgeRating": "4+"
+     }
+    }
+   ]
+  },
+  "/appInfos/info-live/appInfoLocalizations": {
+   "data": [
+    {
+     "type": "appInfoLocalizations",
+     "id": "live-en-US",
+     "attributes": {
+      "locale": "en-US",
+      "name": "Mint Condition",
+      "subtitle": "Card Shop Tycoon",
+      "privacyPolicyUrl": "https://example.com/privacy"
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "live-ja",
+     "attributes": {
+      "locale": "ja",
+      "name": "Mint Condition",
+      "subtitle": "Card Shop Tycoon",
+      "privacyPolicyUrl": "https://example.com/privacy"
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "live-es-MX",
+     "attributes": {
+      "locale": "es-MX",
+      "name": "Mint Condition",
+      "subtitle": "Card Shop Tycoon",
+      "privacyPolicyUrl": "https://example.com/privacy"
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "live-es-ES",
+     "attributes": {
+      "locale": "es-ES",
+      "name": "Mint Condition",
+      "subtitle": "Card Shop Tycoon",
+      "privacyPolicyUrl": "https://example.com/privacy"
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "live-de-DE",
+     "attributes": {
+      "locale": "de-DE",
+      "name": "Mint Condition",
+      "subtitle": "Card Shop Tycoon",
+      "privacyPolicyUrl": "https://example.com/privacy"
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "live-fr-FR",
+     "attributes": {
+      "locale": "fr-FR",
+      "name": "Mint Condition",
+      "subtitle": "Card Shop Tycoon",
+      "privacyPolicyUrl": "https://example.com/privacy"
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "live-ko",
+     "attributes": {
+      "locale": "ko",
+      "name": "Mint Condition",
+      "subtitle": "Card Shop Tycoon",
+      "privacyPolicyUrl": "https://example.com/privacy"
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "live-pt-BR",
+     "attributes": {
+      "locale": "pt-BR",
+      "name": "Mint Condition",
+      "subtitle": "Card Shop Tycoon",
+      "privacyPolicyUrl": "https://example.com/privacy"
+     }
+    }
+   ]
+  },
+  "/appInfos/info-edit/appInfoLocalizations": {
+   "data": [
+    {
+     "type": "appInfoLocalizations",
+     "id": "edit-en-US",
+     "attributes": {
+      "locale": "en-US",
+      "name": "Mint Condition: Card Shop Sim",
+      "subtitle": "Pack Opening & Grading Tycoon",
+      "privacyPolicyUrl": "https://example.com/privacy"
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "edit-ja",
+     "attributes": {
+      "locale": "ja",
+      "name": "Mint Condition: Card Shop Sim",
+      "subtitle": "Pack Opening & Grading Tycoon",
+      "privacyPolicyUrl": "https://example.com/privacy"
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "edit-es-MX",
+     "attributes": {
+      "locale": "es-MX",
+      "name": "Mint Condition: Card Shop Sim",
+      "subtitle": "Pack Opening & Grading Tycoon",
+      "privacyPolicyUrl": null
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "edit-es-ES",
+     "attributes": {
+      "locale": "es-ES",
+      "name": "Mint Condition: Card Shop Sim",
+      "subtitle": "Pack Opening & Grading Tycoon",
+      "privacyPolicyUrl": null
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "edit-de-DE",
+     "attributes": {
+      "locale": "de-DE",
+      "name": "Mint Condition: Card Shop Sim",
+      "subtitle": "Pack Opening & Grading Tycoon",
+      "privacyPolicyUrl": null
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "edit-fr-FR",
+     "attributes": {
+      "locale": "fr-FR",
+      "name": "Mint Condition: Card Shop Sim",
+      "subtitle": "Pack Opening & Grading Tycoon",
+      "privacyPolicyUrl": null
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "edit-ko",
+     "attributes": {
+      "locale": "ko",
+      "name": "Mint Condition: Card Shop Sim",
+      "subtitle": "Pack Opening & Grading Tycoon",
+      "privacyPolicyUrl": null
+     }
+    },
+    {
+     "type": "appInfoLocalizations",
+     "id": "edit-pt-BR",
+     "attributes": {
+      "locale": "pt-BR",
+      "name": "Mint Condition: Card Shop Sim",
+      "subtitle": "Pack Opening & Grading Tycoon",
+      "privacyPolicyUrl": null
+     }
+    }
+   ]
+  },
+  "/appInfos/info-edit/ageRatingDeclaration": {
+   "data": {
+    "type": "ageRatingDeclarations",
+    "id": "age-edit",
+    "attributes": {
+     "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+     "contests": "NONE",
+     "gamblingSimulated": "NONE",
+     "gunsOrOtherWeapons": "NONE",
+     "medicalOrTreatmentInformation": "NONE",
+     "profanityOrCrudeHumor": "NONE",
+     "sexualContentGraphicAndNudity": "NONE",
+     "sexualContentOrNudity": "NONE",
+     "horrorOrFearThemes": "NONE",
+     "matureOrSuggestiveThemes": "NONE",
+     "violenceCartoonOrFantasy": "INFREQUENT_OR_MILD",
+     "violenceRealistic": "NONE",
+     "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+     "gambling": false,
+     "unrestrictedWebAccess": false,
+     "lootBox": false,
+     "messagingAndChat": false,
+     "parentalControls": false,
+     "ageAssurance": false,
+     "userGeneratedContent": false,
+     "advertising": false,
+     "healthOrWellnessTopics": false,
+     "socialMedia": false,
+     "socialMediaAgeRestricted": null,
+     "kidsAgeBand": null,
+     "ageRatingOverride": "NONE",
+     "ageRatingOverrideV2": null,
+     "koreaAgeRatingOverride": null,
+     "seventeenPlus": null,
+     "gamblingAndContests": null,
+     "developerAgeRatingInfoUrl": null,
+     "gracRatingClassificationNumber": null
+    }
+   }
+  },
+  "/apps/111/inAppPurchasesV2": {
+   "data": [
+    {
+     "type": "inAppPurchases",
+     "id": "iap1",
+     "attributes": {
+      "productId": "com.example.mint.pro",
+      "inAppPurchaseType": "NON_CONSUMABLE",
+      "state": "APPROVED"
+     }
+    }
+   ]
+  },
+  "/apps/111/subscriptionGroups": {
+   "data": []
+  }
+ },
+ "version": {
+  "type": "appStoreVersions",
+  "id": "ver-11",
+  "attributes": {
+   "versionString": "1.1",
+   "appStoreState": "PREPARE_FOR_SUBMISSION",
+   "releaseType": "MANUAL"
+  }
+ }
+}

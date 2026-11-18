@@ -79,6 +79,17 @@ appstore-doctor --bundle com.acme.app --project ~/code/MyApp
 appstore-doctor --app-id 1234567890 --json
 ```
 
+As the gate right before a submit for review. App Store Connect checks only, exit
+`1` on anything that would make the submit fail:
+
+```bash
+appstore-doctor --bundle com.acme.app --presubmit
+appstore-doctor --bundle com.acme.app --presubmit --with-iaps   # the submit carries its IAPs
+```
+
+[ios-release-kit](https://github.com/Bkessing/ios-release-kit)'s submit lanes run
+this before they submit, and stop on a failure.
+
 ## With Claude Code
 
 There's a skill in `skills/appstore-doctor/`. Copy it into your skills
@@ -241,10 +252,14 @@ the broken thing *is* your fastlane setup.
 | Screenshot sets | Updating 6.5" while 6.9" quietly serves stale artwork |
 | Subscription metadata | Guideline 3.1.2 rejections on auto-renewing subs |
 | Release type | `MANUAL` when you expected it to ship on approval |
-| Privacy policy URL | Guideline 5.1.1 metadata rejection |
-| Age rating | Missing declaration blocks submission |
+| Required screenshot sizes | No 6.9" or 6.5" iPhone set (or no 13" iPad set for an iPad app) in the primary locale |
+| Privacy policy URL | A locale with no URL on the version being submitted: a 409 at submit, and every newly added language starts empty |
+| Age rating | Missing declaration, or any question left unanswered, including ones Apple adds later (`socialMedia`, Oct 2026) |
+| Name and subtitle | A word in both is indexed once; the repeat is wasted (warning only) |
 | Review demo account | Guideline 2.1 — a reviewer who can't get past your login |
 | In-app purchases | Products stuck in `MISSING_METADATA` that can never sell |
+| Products left out of the submission | A first consumable, non-consumable or subscription not submitted with the version (`FIRST_NON_CONSUMABLE_MUST_BE_SUBMITTED_ON_VERSION`) |
+| Agreements | Any agreement or contract error Apple returned during the run. The API cannot read agreements, so a submission carrying products also gets a reminder |
 
 **Free surfaces you are entitled to and not using:**
 

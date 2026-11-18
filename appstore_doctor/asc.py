@@ -28,6 +28,14 @@ class ASCError(Exception):
     """Raised when the API is unreachable or credentials are unusable."""
 
 
+# Error codes Apple returns when an agreement is not in force. The agreements
+# themselves cannot be read through the API (/v1/agreements is a 404), so these
+# codes are the only machine-readable signal there is. The contract code is the
+# one Apple returned on 2026-11-18 when a first in-app purchase was submitted
+# while the Paid Applications Agreement was inactive.
+AGREEMENT_CODES = ("REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED", "MISSING_VALID_CONTRACT")
+
+
 class MissingCredentials(ASCError):
     """Raised when key id / issuer id / .p8 cannot be located."""
 
@@ -63,6 +71,8 @@ class Client:
             self._key = serialization.load_pem_private_key(handle.read(), password=None)
         self._token = None
         self._token_exp = 0
+        # Any agreement/contract error seen on any request in this run.
+        self.agreement_errors = []
 
     def _mint(self) -> str:
         from cryptography.hazmat.primitives import hashes
@@ -108,7 +118,11 @@ class Client:
                     time.sleep(1.5 * (attempt + 1))
                     self._token = None
                     continue
-                raise ASCError(f"{err.code} on {url}: {err.read().decode()[:300]}") from err
+                body = err.read().decode(errors="replace")
+                for code in AGREEMENT_CODES:
+                    if code in body:
+                        self.agreement_errors.append(f"{err.code} on {url}: {code}")
+                raise ASCError(f"{err.code} on {url}: {body[:300]}") from err
             except urllib.error.URLError as err:
                 last = err
                 if attempt < tries - 1:
