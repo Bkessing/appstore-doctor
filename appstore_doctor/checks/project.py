@@ -186,7 +186,10 @@ def check_privacy_manifest(report, root):
 # app's Swift source, so it is a floor, not a proof: an event called "buy_done"
 # would slip through. Lab Tycoon 1.1 sent "iap_purchased" with no PurchaseHistory
 # declared, which is the case this exists for.
-CAPTURE_CALL = re.compile(r"\b(?:capture|track|logEvent|trackEvent)\(\s*\"([A-Za-z0-9_.:\- ]+)\"")
+# The first argument of an analytics call, up to its first comma or close paren.
+# Every string literal in it counts, so `capture(open ? "a" : "b")` sees both.
+CAPTURE_CALL = re.compile(r"\b(?:capture|track|logEvent|trackEvent)\(([^,)]*)")
+STRING_LITERAL = re.compile(r"\"([A-Za-z0-9_.:\- ]+)\"")
 PRIVACY_EVENT_RULES = (
     # (collected type, what triggers it, test on an event name or None, import regex or None)
     ("NSPrivacyCollectedDataTypePurchaseHistory", "purchase events",
@@ -218,6 +221,8 @@ def declared_data_types(manifest_path):
             data = plistlib.load(handle)
     except (OSError, plistlib.InvalidFileException, ValueError):
         return None
+    if not isinstance(data, dict):
+        return None
     out = set()
     for entry in data.get("NSPrivacyCollectedDataTypes") or []:
         if isinstance(entry, dict) and entry.get("NSPrivacyCollectedDataType"):
@@ -231,8 +236,9 @@ def check_privacy_events(report, root):
                  if "/Pods/" not in m and "/.build/" not in m]
     events, imports = {}, {}
     for rel, text in _app_sources(root):
-        for name in CAPTURE_CALL.findall(text):
-            events.setdefault(name, rel)
+        for arg in CAPTURE_CALL.findall(text):
+            for name in STRING_LITERAL.findall(arg):
+                events.setdefault(name, rel)
         for ctype, _why, _ev, imp in PRIVACY_EVENT_RULES:
             if imp is not None and imp.search(text):
                 imports.setdefault(ctype, rel)

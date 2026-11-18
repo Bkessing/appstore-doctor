@@ -384,3 +384,17 @@ class TestPrivacyEvents(unittest.TestCase):
         r = Report()
         project.run(r, os.path.join(self.tmp, "nope"), presubmit=True)
         self.assertEqual(status_of(r, "project"), FAIL)
+
+    def test_ternary_event_names_are_seen(self):
+        with open(os.path.join(self.app, "Sources", "App", "Monetization.swift"), "w") as handle:
+            handle.write('func f(ok: Bool) { Analytics.capture(ok ? "purchase_completed" : "shop_closed", [:]) }\n')
+        r = self._run()
+        f = [x for x in r.findings if x.check == "project.privacy_events"][0]
+        self.assertEqual(f.status, FAIL)
+        self.assertIn("purchase_completed", f.detail)
+
+    def test_manifest_with_array_root_fails_cleanly(self):
+        import plistlib
+        with open(self.manifest, "wb") as handle:
+            plistlib.dump(["not", "a", "dict"], handle)
+        self.assertEqual(status_of(self._run(), "project.privacy_events"), FAIL)
