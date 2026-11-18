@@ -86,7 +86,9 @@ def check_privacy_policy(report, client, app):
 
 
 # Age-rating attributes that are legitimately null on a complete declaration:
-# overrides, the kids band, an optional info URL, and fields Apple has retired.
+# overrides, the kids band, an optional info URL, fields Apple has retired, and
+# the Korea GRAC rating number (null on all three apps Apple accepted for review
+# on 2026-11-18: CardHabit 2.0, Mint Condition 1.1, Lab Tycoon 1.1).
 # Everything else that is null is a question nobody answered, and a NEW question
 # from Apple shows up exactly that way: `socialMedia` arrived in late Oct 2026
 # as a null field and blocked CardHabit 2.0's submit on 2026-11-18 with an
@@ -94,6 +96,7 @@ def check_privacy_policy(report, client, app):
 AGE_RATING_OPTIONAL = {
     "kidsAgeBand", "ageRatingOverride", "ageRatingOverrideV2", "koreaAgeRatingOverride",
     "developerAgeRatingInfoUrl", "seventeenPlus", "gamblingAndContests",
+    "gracRatingClassificationNumber",
 }
 # Follow-up questions: required only when the parent answer is true.
 AGE_RATING_FOLLOW_UPS = {"socialMediaAgeRestricted": "socialMedia"}
@@ -167,7 +170,8 @@ _FILLER = {"a", "an", "and", "the", "of", "for", "to", "in", "on", "with", "your
 def _words(text):
     out = set()
     for w in re.findall(r"[^\W_]+", (text or "").lower()):
-        if w in _FILLER or len(w) < 2:
+        # Under 3 letters is mostly locale filler ("de", "la", "et"); skip it.
+        if w in _FILLER or len(w) < 3:
             continue
         # Plural and singular are the same keyword to the store index.
         out.add(w[:-1] if len(w) > 3 and w.endswith("s") else w)
@@ -321,7 +325,9 @@ def check_iaps(report, client, app, version, with_iaps=False):
             "readiness.iap",
             f"{len(incomplete)} of {len(products)} in-app purchases are incomplete "
             "and cannot sell",
-            detail=rows,
+            detail="\n".join(f"- {pid}: {state}" for pid, state in incomplete)
+                   + (f"\nIn review (pending, not incomplete): "
+                      f"{', '.join(p for p, _ in in_flight)}" if in_flight else ""),
             fix="MISSING_METADATA means the product has no localized display name,\n"
                 "description or review screenshot. It will not be offered to anyone.\n"
                 "Complete it, or delete it so it stops showing up here.",

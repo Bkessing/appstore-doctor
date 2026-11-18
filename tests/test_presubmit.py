@@ -90,6 +90,12 @@ class TestAgeRatingAnswers(unittest.TestCase):
         readiness.check_age_rating(report, RecordedClient(rec), rec["app"])
         self.assertEqual(status_of(report, "readiness.age_rating"), OK)
 
+    def test_korea_grac_number_null_is_not_a_question(self):
+        # Mac run 2026-11-18: CardHabit 2.0, Mint 1.1 and Lab Tycoon 1.1 were all
+        # accepted into review with gracRatingClassificationNumber null.
+        self.assertEqual(readiness.unanswered_age_rating_fields(
+            {"socialMedia": False, "gracRatingClassificationNumber": None}), [])
+
     def test_follow_up_required_only_when_parent_is_yes(self):
         self.assertEqual(readiness.unanswered_age_rating_fields(
             {"socialMedia": False, "socialMediaAgeRestricted": None}), [])
@@ -116,6 +122,9 @@ class TestNameSubtitle(unittest.TestCase):
     def test_filler_words_do_not_count(self):
         self.assertEqual(readiness._words("Pack Opening & Grading Tycoon")
                          & readiness._words("Mint Condition: Card Shop Sim"), set())
+        # Two-letter locale filler ("de", "la") is not a shared keyword.
+        self.assertEqual(readiness._words("Lab Tycoon de IA")
+                         & readiness._words("Juego de empresa"), set())
         self.assertEqual(readiness._words("The Game of Life")
                          & readiness._words("A game for the ages"), {"game"})
 

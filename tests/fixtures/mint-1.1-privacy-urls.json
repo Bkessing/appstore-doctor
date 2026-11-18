@@ -233,7 +233,8 @@
      "koreaAgeRatingOverride": null,
      "seventeenPlus": null,
      "gamblingAndContests": null,
-     "developerAgeRatingInfoUrl": null
+     "developerAgeRatingInfoUrl": null,
+     "gracRatingClassificationNumber": null
     }
    }
   },
